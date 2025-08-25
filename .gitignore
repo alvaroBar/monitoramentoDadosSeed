@@ -1,0 +1,20 @@
+# Arquivos de credenciais e tokens
+client_secrets.json
+token.json
+
+# Arquivos CSV (geralmente não se versiona dados)
+*.csv
+
+# Arquivos de ambiente virtual do Python
+.venv/
+venv/
+__pycache__/
+
+# Arquivos de diagnóstico que não precisam ir para o repositório
+diagnose_*.py
+compare_*.py
+final_analysis.py
+export_from_bq.py
+initial_load.py
+load_in_chunks.py
+verify_columns.py
