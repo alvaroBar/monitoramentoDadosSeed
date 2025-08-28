@@ -193,6 +193,8 @@ if not st.session_state.df_processado.empty:
                     st.balloons()
                     # Limpa o estado para um novo processamento
                     st.session_state.df_processado = pd.DataFrame()
+                    # Força a reinicialização do app para a tela inicial
+                    st.rerun()
                 else:
                     st.error("Falha no envio dos dados. Verifique a mensagem de erro acima.")
     else:
