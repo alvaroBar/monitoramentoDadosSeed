@@ -94,7 +94,7 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, numero_da_semana)
 # --- Interface do Streamlit ---
 
 st.set_page_config(layout="wide")
-st.title("Conversor LRCO: PDF ➡️ BigQuery 📄➡️☁️")
+st.title("Conversor LRCO: PDF ➡️ BigQuery 📄➡️☁️ - Teste")
 
 # --- Lógica de Estado para o DataFrame ---
 if 'df_processado' not in st.session_state:
