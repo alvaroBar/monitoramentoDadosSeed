@@ -124,25 +124,31 @@ if 'df_processado' not in st.session_state:
     st.session_state.df_processado = pd.DataFrame()
 if 'upload_success' not in st.session_state:
     st.session_state.upload_success = False
+# Chave para forçar o reset do widget de upload de arquivos
+if 'uploader_key' not in st.session_state:
+    st.session_state.uploader_key = 0
+
+# --- Função de Callback para Limpar o Uploader e resetar o estado ---
+def reset_workflow():
+    st.session_state.df_processado = pd.DataFrame()
+    st.session_state.upload_success = False
+    # Incrementa a chave para forçar o uploader a ser recriado como um novo widget
+    st.session_state.uploader_key += 1
 
 # --- Passo 1: Upload e Processamento ---
 st.info("Passo 1: Carregue os arquivos PDF e a planilha de disciplinas.")
 col1, col2 = st.columns(2)
 with col1:
+    # A chave do uploader agora é dinâmica, baseada no estado da sessão
     uploaded_files = st.file_uploader(
         "Selecione os arquivos PDF do relatório LRCO",
         type="pdf",
         accept_multiple_files=True,
-        key="pdf_uploader"  # Adiciona uma chave para controlar o estado
+        key=f"pdf_uploader_{st.session_state.uploader_key}"
     )
-    # Botão para limpar os arquivos PDF enviados
-    if uploaded_files: # Mostra o botão apenas se houver arquivos
-        if st.button("Remover Todos os Arquivos"):
-            # Deleta a chave de estado do uploader para forçar um reset completo.
-            if "pdf_uploader" in st.session_state:
-                del st.session_state["pdf_uploader"]
-            # Força um rerun para que a página seja redesenhada sem os arquivos.
-            st.rerun()
+    # Botão para limpar os arquivos PDF enviados usando a função de callback
+    if uploaded_files:
+        st.button("Remover Todos os Arquivos", on_click=reset_workflow)
 
 with col2:
     disciplinas_file = st.file_uploader("Selecione a planilha com a lista oficial de disciplinas", type=["xlsx"])
@@ -180,11 +186,8 @@ if not st.session_state.df_processado.empty:
         st.success(f"Dados da semana {st.session_state.get('semana_enviada', '')} enviados para o BigQuery com sucesso!")
         st.balloons()
         
-        if st.button("🎉 Iniciar Novo Lançamento"):
-            # Limpa todos os estados e reinicia o app
-            st.session_state.df_processado = pd.DataFrame()
-            st.session_state.upload_success = False
-            st.rerun()
+        # O botão para iniciar um novo lançamento agora também usa a função de reset
+        st.button("🎉 Iniciar Novo Lançamento", on_click=reset_workflow)
     
     # Caso contrário, mostra a tela normal de configuração e envio
     else:
