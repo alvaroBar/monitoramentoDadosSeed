@@ -129,7 +129,17 @@ if 'upload_success' not in st.session_state:
 st.info("Passo 1: Carregue os arquivos PDF e a planilha de disciplinas.")
 col1, col2 = st.columns(2)
 with col1:
-    uploaded_files = st.file_uploader("Selecione os arquivos PDF do relatório LRCO", type="pdf", accept_multiple_files=True)
+    uploaded_files = st.file_uploader(
+        "Selecione os arquivos PDF do relatório LRCO",
+        type="pdf",
+        accept_multiple_files=True,
+        key="pdf_uploader"  # Adiciona uma chave para controlar o estado
+    )
+    # Botão para limpar os arquivos PDF enviados
+    if uploaded_files: # Mostra o botão apenas se houver arquivos
+        if st.button("Remover Arquivos PDF"):
+            st.session_state.pdf_uploader = []
+            st.rerun()
 with col2:
     disciplinas_file = st.file_uploader("Selecione a planilha com a lista oficial de disciplinas", type=["xlsx"])
 
