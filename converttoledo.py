@@ -138,7 +138,8 @@ with col1:
     # Botão para limpar os arquivos PDF enviados
     if uploaded_files: # Mostra o botão apenas se houver arquivos
         if st.button("Remover Arquivos PDF"):
-            st.session_state.pdf_uploader = []
+            # CORREÇÃO AQUI: Para limpar o uploader, atribuímos None
+            st.session_state.pdf_uploader = None
             st.rerun()
 with col2:
     disciplinas_file = st.file_uploader("Selecione a planilha com a lista oficial de disciplinas", type=["xlsx"])
