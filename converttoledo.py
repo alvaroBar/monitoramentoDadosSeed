@@ -127,7 +127,9 @@ if 'upload_success' not in st.session_state:
 
 # --- Função de Callback para Limpar o Uploader ---
 def clear_pdf_uploader():
-    st.session_state.pdf_uploader = None
+    # CORREÇÃO AQUI: Deletamos a chave de estado para resetar o widget completamente.
+    if "pdf_uploader" in st.session_state:
+        del st.session_state.pdf_uploader
 
 # --- Passo 1: Upload e Processamento ---
 st.info("Passo 1: Carregue os arquivos PDF e a planilha de disciplinas.")
