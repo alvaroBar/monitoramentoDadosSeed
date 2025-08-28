@@ -125,6 +125,10 @@ if 'df_processado' not in st.session_state:
 if 'upload_success' not in st.session_state:
     st.session_state.upload_success = False
 
+# --- Função de Callback para Limpar o Uploader ---
+def clear_pdf_uploader():
+    st.session_state.pdf_uploader = None
+
 # --- Passo 1: Upload e Processamento ---
 st.info("Passo 1: Carregue os arquivos PDF e a planilha de disciplinas.")
 col1, col2 = st.columns(2)
@@ -137,10 +141,8 @@ with col1:
     )
     # Botão para limpar os arquivos PDF enviados
     if uploaded_files: # Mostra o botão apenas se houver arquivos
-        if st.button("Remover Arquivos PDF"):
-            # CORREÇÃO AQUI: Para limpar o uploader, atribuímos None
-            st.session_state.pdf_uploader = None
-            st.rerun()
+        st.button("Remover Arquivos PDF", on_click=clear_pdf_uploader)
+
 with col2:
     disciplinas_file = st.file_uploader("Selecione a planilha com a lista oficial de disciplinas", type=["xlsx"])
 
