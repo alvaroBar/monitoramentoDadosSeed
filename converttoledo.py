@@ -125,12 +125,6 @@ if 'df_processado' not in st.session_state:
 if 'upload_success' not in st.session_state:
     st.session_state.upload_success = False
 
-# --- Função de Callback para Limpar o Uploader ---
-def clear_pdf_uploader():
-    # CORREÇÃO AQUI: Deletamos a chave de estado para resetar o widget completamente.
-    if "pdf_uploader" in st.session_state:
-        del st.session_state.pdf_uploader
-
 # --- Passo 1: Upload e Processamento ---
 st.info("Passo 1: Carregue os arquivos PDF e a planilha de disciplinas.")
 col1, col2 = st.columns(2)
@@ -143,7 +137,12 @@ with col1:
     )
     # Botão para limpar os arquivos PDF enviados
     if uploaded_files: # Mostra o botão apenas se houver arquivos
-        st.button("Remover Arquivos PDF", on_click=clear_pdf_uploader)
+        if st.button("Remover Todos os Arquivos"):
+            # Deleta a chave de estado do uploader para forçar um reset completo.
+            if "pdf_uploader" in st.session_state:
+                del st.session_state["pdf_uploader"]
+            # Força um rerun para que a página seja redesenhada sem os arquivos.
+            st.rerun()
 
 with col2:
     disciplinas_file = st.file_uploader("Selecione a planilha com a lista oficial de disciplinas", type=["xlsx"])
