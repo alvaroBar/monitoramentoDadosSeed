@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO ATUALIZADO: bigquery_loader.py
-# Modificado para aceitar diferentes modos de carregamento (append/replace).
+# Adicionada função para buscar todos os dados da tabela para backup.
 # ==============================================================================
 
 import pandas as pd
@@ -36,14 +36,29 @@ def get_latest_week(creds):
         return 0
 
 
+def get_all_data_from_bq(creds):
+    """
+    Busca todos os dados da tabela no BigQuery, ordenados para consistência.
+    """
+    try:
+        project_id = creds.project_id
+        # Ordena os dados para que o backup seja consistente
+        sql_query = f"SELECT * FROM `{project_id}.{TABLE_ID}` ORDER BY SEMANA, DATA_DO_RELATORIO"
+
+        df = pandas_gbq.read_gbq(sql_query, project_id=project_id, credentials=creds)
+
+        return df
+    except Exception as e:
+        st.error(f"Não foi possível buscar os dados do BigQuery. Erro: {e}")
+        return pd.DataFrame()  # Retorna um DataFrame vazio em caso de erro
+
+
 def preparar_dataframe_para_bigquery(df: pd.DataFrame) -> pd.DataFrame:
     df_copy = df.copy()
 
     # Validação da coluna SEMANA
     if 'SEMANA' in df_copy.columns:
-        df_copy['SEMANA'] = pd.to_numeric(df_copy['SEMANA'], errors='coerce')
-        df_copy['SEMANA'] = df_copy['SEMANA'].fillna(0)
-        df_copy['SEMANA'] = df_copy['SEMANA'].astype(int)
+        df_copy['SEMANA'] = pd.to_numeric(df_copy['SEMANA'], errors='coerce').fillna(0).astype(int)
 
     # Limpeza de todas as colunas de texto
     for col in df_copy.select_dtypes(include=['object']).columns:
@@ -82,7 +97,7 @@ def carregar_dados_no_bigquery(df: pd.DataFrame, creds, if_exists_mode: str):
             destination_table=TABLE_ID,
             project_id=project_id,
             credentials=creds,
-            if_exists=if_exists_mode  # <-- MUDANÇA IMPORTANTE AQUI
+            if_exists=if_exists_mode
         )
         return True
     except Exception as e:
