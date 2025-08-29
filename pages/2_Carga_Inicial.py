@@ -52,6 +52,12 @@ if uploaded_csv:
                 st.stop()
             # --- FIM DO NOVO BLOCO ---
 
+            # --- NOVA LÓGICA DE ORDENAÇÃO ---
+            # Ordena o DataFrame pela coluna 'SEMANA' para facilitar a comparação.
+            st.write("Ordenando dados por semana antes do envio...")
+            df_inicial = df_inicial.sort_values(by='SEMANA').reset_index(drop=True)
+            # --- FIM DA NOVA LÓGICA ---
+
             with st.spinner("Conectando ao BigQuery e enviando os dados... Por favor, aguarde."):
                 # Chama a função de carregamento com o modo 'replace'
                 sucesso = autenticar_e_carregar(df_inicial, if_exists_mode='replace')
