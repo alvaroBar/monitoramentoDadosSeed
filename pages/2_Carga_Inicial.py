@@ -28,7 +28,7 @@ uploaded_csv = st.file_uploader(
 
 if uploaded_csv:
     st.warning("⚠️ **Atenção:** Pressionar o botão abaixo irá substituir todos os dados na tabela `relatorios_lrco`.",
-               icon="�")
+               icon="🚨")
 
     if st.button("Iniciar Carga Inicial e Substituir Dados"):
         try:
@@ -75,4 +75,3 @@ if uploaded_csv:
 
         except Exception as e:
             st.error(f"Ocorreu um erro durante o processo de carga inicial: {e}")
-�
