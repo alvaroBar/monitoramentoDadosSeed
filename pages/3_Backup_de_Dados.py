@@ -30,8 +30,11 @@ if st.button("Baixar Backup Completo (Excel)"):
         if not df_backup.empty:
             st.success(f"Sucesso! {len(df_backup)} registros encontrados.")
 
-            # Preenche valores nulos/vazios com 'Sem registro'
-            df_backup.fillna("Sem registro", inplace=True)
+            # --- CORREÇÃO AQUI ---
+            # Converte as colunas de data/hora para o tipo 'object' para permitir a inserção de texto
+            # e preenche valores nulos APENAS nas colunas especificadas.
+            df_backup['REGISTRO_DE_AULA'] = df_backup['REGISTRO_DE_AULA'].astype(object).fillna("Sem registro")
+            df_backup['REGISTRO_DE_CONTEUDO'] = df_backup['REGISTRO_DE_CONTEUDO'].astype(object).fillna("Sem registro")
 
             # --- Lógica para criar um arquivo Excel com formatação ---
             output = BytesIO()
