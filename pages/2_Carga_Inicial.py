@@ -28,7 +28,7 @@ uploaded_csv = st.file_uploader(
 
 if uploaded_csv:
     st.warning("⚠️ **Atenção:** Pressionar o botão abaixo irá substituir todos os dados na tabela `relatorios_lrco`.",
-               icon="🚨")
+               icon="�")
 
     if st.button("Iniciar Carga Inicial e Substituir Dados"):
         try:
@@ -53,6 +53,9 @@ if uploaded_csv:
             # --- FIM DO NOVO BLOCO ---
 
             # --- NOVA LÓGICA DE ORDENAÇÃO ---
+            # CORREÇÃO: Garante que a coluna 'SEMANA' é do tipo numérico antes de ordenar
+            df_inicial['SEMANA'] = pd.to_numeric(df_inicial['SEMANA'], errors='coerce').fillna(0).astype(int)
+
             # Ordena o DataFrame pela coluna 'SEMANA' para facilitar a comparação.
             st.write("Ordenando dados por semana antes do envio...")
             df_inicial = df_inicial.sort_values(by='SEMANA').reset_index(drop=True)
@@ -72,3 +75,4 @@ if uploaded_csv:
 
         except Exception as e:
             st.error(f"Ocorreu um erro durante o processo de carga inicial: {e}")
+�
