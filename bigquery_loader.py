@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO ATUALIZADO: bigquery_loader.py
-# Adicionada função para buscar todos os dados da tabela para backup.
+# Adicionada função para buscar semanas disponíveis e filtrar backup por semana.
 # ==============================================================================
 
 import pandas as pd
@@ -36,31 +36,56 @@ def get_latest_week(creds):
         return 0
 
 
-def get_all_data_from_bq(creds):
+def get_available_weeks(creds):
     """
-    Busca todos os dados da tabela no BigQuery, ordenados para consistência.
+    Busca todas as semanas únicas presentes na tabela do BigQuery.
     """
     try:
         project_id = creds.project_id
-        # Ordena os dados para que o backup seja consistente
-        sql_query = f"SELECT * FROM `{project_id}.{TABLE_ID}` ORDER BY SEMANA, DATA_DO_RELATORIO"
+        sql_query = f"SELECT DISTINCT SEMANA FROM `{project_id}.{TABLE_ID}` ORDER BY SEMANA"
+        df = pandas_gbq.read_gbq(sql_query, project_id=project_id, credentials=creds)
+        if df.empty:
+            return []
+        # Converte para int para garantir que sejam números e remove nulos
+        return sorted([int(week) for week in df['SEMANA'].dropna()])
+    except Exception as e:
+        st.error(f"Não foi possível buscar a lista de semanas. Erro: {e}")
+        return []
+
+
+def get_all_data_from_bq(creds, weeks=None):
+    """
+    Busca dados da tabela no BigQuery. Se 'weeks' for fornecido,
+    filtra por essas semanas. Caso contrário, busca todos os dados.
+    """
+    try:
+        project_id = creds.project_id
+        sql_query = f"SELECT * FROM `{project_id}.{TABLE_ID}`"
+
+        # Adiciona o filtro de semanas se uma lista de semanas for fornecida
+        if weeks and isinstance(weeks, list) and len(weeks) > 0:
+            numeric_weeks = [int(w) for w in weeks]
+            weeks_tuple_str = str(tuple(numeric_weeks))
+            # Lida com o caso de tupla de um único elemento que precisa de uma vírgula
+            if len(numeric_weeks) == 1:
+                weeks_tuple_str = f"({numeric_weeks[0]})"
+            sql_query += f" WHERE SEMANA IN {weeks_tuple_str}"
+
+        sql_query += " ORDER BY SEMANA, DATA_DO_RELATORIO"
 
         df = pandas_gbq.read_gbq(sql_query, project_id=project_id, credentials=creds)
-
         return df
     except Exception as e:
         st.error(f"Não foi possível buscar os dados do BigQuery. Erro: {e}")
-        return pd.DataFrame()  # Retorna um DataFrame vazio em caso de erro
+        return pd.DataFrame()
 
 
 def preparar_dataframe_para_bigquery(df: pd.DataFrame) -> pd.DataFrame:
     df_copy = df.copy()
 
-    # Validação da coluna SEMANA
     if 'SEMANA' in df_copy.columns:
         df_copy['SEMANA'] = pd.to_numeric(df_copy['SEMANA'], errors='coerce').fillna(0).astype(int)
 
-    # Limpeza de todas as colunas de texto
     for col in df_copy.select_dtypes(include=['object']).columns:
         if col != 'SEMANA':
             df_copy[col] = df_copy[col].str.strip()
@@ -68,7 +93,6 @@ def preparar_dataframe_para_bigquery(df: pd.DataFrame) -> pd.DataFrame:
 
     df_copy.replace("Sem registro", None, inplace=True)
 
-    # Conversão de tipos de dados
     if 'DATA_DO_RELATORIO' in df_copy.columns:
         df_copy["DATA_DO_RELATORIO"] = pd.to_datetime(df_copy["DATA_DO_RELATORIO"], format='%d/%m/%Y',
                                                       errors='coerce').dt.date
@@ -85,9 +109,6 @@ def preparar_dataframe_para_bigquery(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def carregar_dados_no_bigquery(df: pd.DataFrame, creds, if_exists_mode: str):
-    """
-    Carrega um DataFrame do Pandas em uma tabela do BigQuery.
-    """
     try:
         df_limpo = preparar_dataframe_para_bigquery(df)
         project_id = creds.project_id
@@ -106,9 +127,6 @@ def carregar_dados_no_bigquery(df: pd.DataFrame, creds, if_exists_mode: str):
 
 
 def autenticar_e_carregar(df, if_exists_mode='append'):
-    """
-    Função unificada que autentica e carrega os dados com o modo especificado.
-    """
     creds = autenticar_com_service_account()
     if creds:
         return carregar_dados_no_bigquery(df, creds, if_exists_mode)
