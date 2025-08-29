@@ -10,7 +10,7 @@ import time
 
 # Importa a função de carregamento do módulo principal
 # O .. significa "voltar um diretório" para encontrar o bigquery_loader
-from ..bigquery_loader import autenticar_e_carregar
+from bigquery_loader import autenticar_e_carregar
 
 st.set_page_config(layout="wide")
 st.title("🗂️ Carga Inicial de Dados para o BigQuery")
