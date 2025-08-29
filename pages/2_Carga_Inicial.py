@@ -8,8 +8,8 @@ import streamlit as st
 import pandas as pd
 import time
 
-# Importa a função de carregamento do módulo principal
-# O .. significa "voltar um diretório" para encontrar o bigquery_loader
+# --- CORREÇÃO AQUI ---
+# A importação agora é direta, sem os ".."
 from bigquery_loader import autenticar_e_carregar
 
 st.set_page_config(layout="wide")
@@ -37,6 +37,20 @@ if uploaded_csv:
                 df_inicial = pd.read_csv(uploaded_csv, encoding='utf-8')
 
             st.success(f"Arquivo lido com sucesso! {len(df_inicial)} linhas encontradas.")
+
+            # --- NOVO BLOCO DE CÓDIGO PARA CORRIGIR OS NOMES DAS COLUNAS ---
+            # Padroniza os nomes das colunas para remover espaços e acentos,
+            # garantindo que correspondam ao esperado pela função de preparação.
+            colunas_esperadas = [
+                "SEMANA", "DATA_DO_RELATORIO", "MUNICIPIO", "ESCOLA", "TURMA",
+                "HORARIO", "DISCIPLINA", "REGISTRO_DE_AULA", "REGISTRO_DE_CONTEUDO"
+            ]
+            if len(df_inicial.columns) == len(colunas_esperadas):
+                df_inicial.columns = colunas_esperadas
+            else:
+                st.error("O número de colunas no CSV não corresponde ao esperado. Verifique o arquivo.")
+                st.stop()
+            # --- FIM DO NOVO BLOCO ---
 
             with st.spinner("Conectando ao BigQuery e enviando os dados... Por favor, aguarde."):
                 # Chama a função de carregamento com o modo 'replace'
