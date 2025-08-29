@@ -34,8 +34,11 @@ if st.button("Baixar Backup Completo (CSV)"):
             df_backup['REGISTRO_DE_AULA'] = df_backup['REGISTRO_DE_AULA'].astype(str)
             df_backup['REGISTRO_DE_CONTEUDO'] = df_backup['REGISTRO_DE_CONTEUDO'].astype(str)
 
-            # Agora, substitui a string 'NaT' pelo texto desejado.
-            df_backup.replace('NaT', 'Sem registro', inplace=True)
+            # Agora, substitui a string 'NaT' pelo texto desejado usando o método .str.replace()
+            df_backup['REGISTRO_DE_AULA'] = df_backup['REGISTRO_DE_AULA'].str.replace('NaT', 'Sem registro',
+                                                                                      regex=False)
+            df_backup['REGISTRO_DE_CONTEUDO'] = df_backup['REGISTRO_DE_CONTEUDO'].str.replace('NaT', 'Sem registro',
+                                                                                              regex=False)
 
             # --- Lógica Otimizada para CSV ---
             # Converte o DataFrame para CSV em memória, que é uma operação muito rápida.
