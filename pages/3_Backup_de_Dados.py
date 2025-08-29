@@ -20,10 +20,11 @@ st.info(
     "atualmente armazenados na tabela `relatorios_lrco`."
 )
 
-if st.button("Buscar Dados para Backup"):
+# O botão agora tem um texto mais claro sobre o que ele faz
+if st.button("Preparar Dados para Download"):
     creds = autenticar_com_service_account()
     if creds:
-        with st.spinner("Buscando todos os dados no BigQuery... Isso pode levar um momento."):
+        with st.spinner("Buscando todos os dados no BigQuery... Esta é a etapa demorada e pode levar um momento."):
             df_backup = get_all_data_from_bq(creds)
 
         if not df_backup.empty:
@@ -38,7 +39,10 @@ if st.button("Buscar Dados para Backup"):
 # Só mostra os botões se os dados já tiverem sido buscados
 if 'df_backup' in st.session_state and not st.session_state.df_backup.empty:
     st.markdown("---")
-    st.subheader("Escolha o formato para baixar:")
+    st.subheader("Dados Prontos. Escolha o formato para baixar:")
+    # Adiciona um texto explicativo
+    st.markdown(
+        "A etapa demorada (buscar os dados) já foi concluída. Agora, a geração e o download do arquivo final serão rápidos.")
 
     df_download = st.session_state.df_backup.copy()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
