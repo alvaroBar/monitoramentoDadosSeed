@@ -29,10 +29,13 @@ if st.button("Baixar Backup Completo (CSV)"):
         if not df_backup.empty:
             st.success(f"Sucesso! {len(df_backup)} registros encontrados.")
 
-            # Preenche valores nulos APENAS nas colunas especificadas.
-            # Esta operação é mantida pois é relativamente rápida.
-            df_backup['REGISTRO_DE_AULA'] = df_backup['REGISTRO_DE_AULA'].astype(str).fillna("Sem registro")
-            df_backup['REGISTRO_DE_CONTEUDO'] = df_backup['REGISTRO_DE_CONTEUDO'].astype(str).fillna("Sem registro")
+            # --- CORREÇÃO AQUI ---
+            # Converte as colunas de data/hora para texto. Isso transforma os valores nulos (NaT) na string 'NaT'.
+            df_backup['REGISTRO_DE_AULA'] = df_backup['REGISTRO_DE_AULA'].astype(str)
+            df_backup['REGISTRO_DE_CONTEUDO'] = df_backup['REGISTRO_DE_CONTEUDO'].astype(str)
+
+            # Agora, substitui a string 'NaT' pelo texto desejado.
+            df_backup.replace('NaT', 'Sem registro', inplace=True)
 
             # --- Lógica Otimizada para CSV ---
             # Converte o DataFrame para CSV em memória, que é uma operação muito rápida.
