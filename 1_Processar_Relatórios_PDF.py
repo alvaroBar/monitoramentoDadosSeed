@@ -21,7 +21,7 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, numero_da_semana)
     Corrigida para manter o contexto (escola, município) entre os arquivos.
     """
     dados_extraidos = []
-    
+
     horario_re = r"\d{2}:\d{2}:\d{2}"
     registro_re = r"\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}"
     data_relatorio_re = r"\b\d{2}/\d{2}/\d{4}\b"
@@ -34,7 +34,7 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, numero_da_semana)
 
     for arquivo_pdf in lista_de_arquivos_pdf:
         turma_atual = None
-        
+
         with pdfplumber.open(arquivo_pdf) as pdf:
             for page_num, page in enumerate(pdf.pages):
                 texto_pagina = page.extract_text()
@@ -47,17 +47,17 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, numero_da_semana)
                     for i, linha in enumerate(linhas):
                         if "ESTADO DO PARANÁ" in linha:
                             match_data = re.search(data_relatorio_re, linha)
-                            if match_data: 
+                            if match_data:
                                 data_relatorio = match_data.group()
                         if "SECRETARIA DE ESTADO DA EDUCAÇÃO" in linha:
                             municipio_temp = linha.split("SECRETARIA")[0].strip()
-                            if municipio_temp: # Só atualiza se encontrar um novo município
+                            if municipio_temp:  # Só atualiza se encontrar um novo município
                                 municipio = municipio_temp
                             if i + 1 < len(linhas):
                                 nome_escola_temp = linhas[i + 1].strip()
-                                if nome_escola_temp: # Só atualiza se encontrar uma nova escola
+                                if nome_escola_temp:  # Só atualiza se encontrar uma nova escola
                                     nome_escola = nome_escola_temp
-                
+
                 # O restante da lógica de extração de linhas continua a mesma
                 for linha in linhas:
                     linha = linha.strip()
@@ -65,7 +65,7 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, numero_da_semana)
                     if " - " in linha and "TURMA" not in linha and "LANÇAMENTO" not in linha:
                         turma_atual = linha
                         continue
-                    if not turma_atual: 
+                    if not turma_atual:
                         continue
 
                     horarios = re.findall(horario_re, linha)
@@ -93,7 +93,7 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, numero_da_semana)
 
                     if not disciplina_encontrada:
                         continue  # pula linha se disciplina não reconhecida
-                    
+
                     dados_extraidos.append([
                         numero_da_semana,
                         data_relatorio,
@@ -128,12 +128,14 @@ if 'upload_success' not in st.session_state:
 if 'uploader_key' not in st.session_state:
     st.session_state.uploader_key = 0
 
+
 # --- Função de Callback para Limpar o Uploader e resetar o estado ---
 def reset_workflow():
     st.session_state.df_processado = pd.DataFrame()
     st.session_state.upload_success = False
     # Incrementa a chave para forçar o uploader a ser recriado como um novo widget
     st.session_state.uploader_key += 1
+
 
 # --- Passo 1: Upload e Processamento ---
 st.info("Passo 1: Carregue os arquivos PDF e a planilha de disciplinas.")
@@ -160,12 +162,12 @@ if uploaded_files and disciplinas_file:
         try:
             disciplinas_df = pd.read_excel(disciplinas_file)
             lista_disciplinas_validas = [str(d).strip().upper() for d in disciplinas_df.iloc[:, 0].dropna().unique()]
-            
+
             creds = autenticar_com_service_account()
             if creds:
                 with st.spinner("Buscando última semana registrada no BigQuery..."):
                     ultima_semana = get_latest_week(creds)
-                
+
                 st.session_state.ultima_semana = ultima_semana
                 st.session_state.semana_sugerida = ultima_semana + 1
 
@@ -174,32 +176,34 @@ if uploaded_files and disciplinas_file:
                     st.session_state.df_processado = df_temp
             else:
                 st.error("Não foi possível autenticar. Verifique as credenciais nos Segredos do Streamlit.")
-        
+
         except Exception as e:
             st.error(f"Ocorreu um erro inesperado durante o processamento: {e}")
 
 # --- Passo 2: Configuração e Envio ---
 if not st.session_state.df_processado.empty:
-    
+
     # Se o upload foi bem-sucedido, mostra a tela de sucesso e o botão de reiniciar
     if st.session_state.upload_success:
-        st.success(f"Dados da semana {st.session_state.get('semana_enviada', '')} enviados para o BigQuery com sucesso!")
+        st.success(
+            f"Dados da semana {st.session_state.get('semana_enviada', '')} enviados para o BigQuery com sucesso!")
         st.balloons()
-        
+
         # O botão para iniciar um novo lançamento agora também usa a função de reset
         st.button("🎉 Iniciar Novo Lançamento", on_click=reset_workflow)
-    
+
     # Caso contrário, mostra a tela normal de configuração e envio
     else:
-        st.success(f"✅ Conversão concluída! {len(st.session_state.df_processado)} registros foram extraídos com sucesso.")
-        
+        st.success(
+            f"✅ Conversão concluída! {len(st.session_state.df_processado)} registros foram extraídos com sucesso.")
+
         st.markdown("---")
         st.subheader("Passo 2: Configure os dados para envio")
-        
+
         col_info, col_input = st.columns(2)
         with col_info:
             st.metric("Última Semana no Banco de Dados", st.session_state.get('ultima_semana', 'N/A'))
-        
+
         with col_input:
             semana_para_envio = st.number_input(
                 "Confirme ou altere o número da semana para estes novos registros:",
@@ -210,21 +214,22 @@ if not st.session_state.df_processado.empty:
 
         st.markdown("#### Filtrar Disciplinas")
         disciplinas_encontradas = sorted(st.session_state.df_processado['DISCIPLINA'].unique())
-        
+
         disciplinas_selecionadas = st.multiselect(
             "Selecione as disciplinas que deseja enviar para o BigQuery (todas estão marcadas por padrão):",
             options=disciplinas_encontradas,
             default=disciplinas_encontradas
         )
 
-        df_filtrado = st.session_state.df_processado[st.session_state.df_processado['DISCIPLINA'].isin(disciplinas_selecionadas)]
-        
+        df_filtrado = st.session_state.df_processado[
+            st.session_state.df_processado['DISCIPLINA'].isin(disciplinas_selecionadas)]
+
         df_para_envio = df_filtrado.copy()
         df_para_envio['SEMANA'] = semana_para_envio
-        
+
         st.markdown("---")
         st.subheader("Passo 3: Envie os Dados")
-        
+
         if not df_para_envio.empty:
             st.write(f"**{len(df_para_envio)}** registros prontos para serem enviados. Pré-visualização:")
             st.dataframe(df_para_envio.head())

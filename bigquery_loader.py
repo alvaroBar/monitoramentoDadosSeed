@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO ATUALIZADO: bigquery_loader.py
-# Adicionada função para buscar a última semana registrada no BigQuery.
+# Modificado para aceitar diferentes modos de carregamento (append/replace).
 # ==============================================================================
 
 import pandas as pd
@@ -13,10 +13,6 @@ TABLE_ID = "Lancamentos_lrco.relatorios_lrco"
 
 
 def autenticar_com_service_account():
-    """
-    Autentica no Google Cloud usando as credenciais da Conta de Serviço
-    armazenadas nos Segredos do Streamlit.
-    """
     try:
         creds_dict = st.secrets["gcp_service_account"]
         creds = service_account.Credentials.from_service_account_info(creds_dict)
@@ -28,19 +24,12 @@ def autenticar_com_service_account():
 
 
 def get_latest_week(creds):
-    """
-    Busca o maior número da coluna 'SEMANA' na tabela do BigQuery.
-    """
     try:
         project_id = creds.project_id
         sql_query = f"SELECT MAX(SEMANA) as ultima_semana FROM `{project_id}.{TABLE_ID}`"
-
         df = pandas_gbq.read_gbq(sql_query, project_id=project_id, credentials=creds)
-
-        # Se a tabela estiver vazia, o resultado será None/NaN.
         if df.empty or pd.isna(df['ultima_semana'].iloc[0]):
             return 0
-
         return int(df['ultima_semana'].iloc[0])
     except Exception as e:
         st.warning(f"Não foi possível buscar a última semana. Erro: {e}")
@@ -48,16 +37,13 @@ def get_latest_week(creds):
 
 
 def preparar_dataframe_para_bigquery(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Versão final: Valida a coluna SEMANA, sanitiza todas as
-    colunas de texto, converte tipos e garante compatibilidade total.
-    """
     df_copy = df.copy()
 
     # Validação da coluna SEMANA
-    df_copy['SEMANA'] = pd.to_numeric(df_copy['SEMANA'], errors='coerce')
-    df_copy['SEMANA'] = df_copy['SEMANA'].fillna(0)
-    df_copy['SEMANA'] = df_copy['SEMANA'].astype(int)
+    if 'SEMANA' in df_copy.columns:
+        df_copy['SEMANA'] = pd.to_numeric(df_copy['SEMANA'], errors='coerce')
+        df_copy['SEMANA'] = df_copy['SEMANA'].fillna(0)
+        df_copy['SEMANA'] = df_copy['SEMANA'].astype(int)
 
     # Limpeza de todas as colunas de texto
     for col in df_copy.select_dtypes(include=['object']).columns:
@@ -68,18 +54,22 @@ def preparar_dataframe_para_bigquery(df: pd.DataFrame) -> pd.DataFrame:
     df_copy.replace("Sem registro", None, inplace=True)
 
     # Conversão de tipos de dados
-    df_copy["DATA_DO_RELATORIO"] = pd.to_datetime(df_copy["DATA_DO_RELATORIO"], format='%d/%m/%Y',
-                                                  errors='coerce').dt.date
-    df_copy["REGISTRO_DE_AULA"] = pd.to_datetime(df_copy["REGISTRO_DE_AULA"], format='%d/%m/%Y %H:%M:%S',
-                                                 errors='coerce')
-    df_copy["REGISTRO_DE_CONTEUDO"] = pd.to_datetime(df_copy["REGISTRO_DE_CONTEUDO"], format='%d/%m/%Y %H:%M:%S',
+    if 'DATA_DO_RELATORIO' in df_copy.columns:
+        df_copy["DATA_DO_RELATORIO"] = pd.to_datetime(df_copy["DATA_DO_RELATORIO"], format='%d/%m/%Y',
+                                                      errors='coerce').dt.date
+    if 'REGISTRO_DE_AULA' in df_copy.columns:
+        df_copy["REGISTRO_DE_AULA"] = pd.to_datetime(df_copy["REGISTRO_DE_AULA"], format='%d/%m/%Y %H:%M:%S',
                                                      errors='coerce')
-    df_copy['HORARIO'] = pd.to_datetime(df_copy['HORARIO'], format='%H:%M:%S', errors='coerce').dt.time
+    if 'REGISTRO_DE_CONTEUDO' in df_copy.columns:
+        df_copy["REGISTRO_DE_CONTEUDO"] = pd.to_datetime(df_copy["REGISTRO_DE_CONTEUDO"], format='%d/%m/%Y %H:%M:%S',
+                                                         errors='coerce')
+    if 'HORARIO' in df_copy.columns:
+        df_copy['HORARIO'] = pd.to_datetime(df_copy['HORARIO'], format='%H:%M:%S', errors='coerce').dt.time
 
     return df_copy
 
 
-def carregar_dados_no_bigquery(df: pd.DataFrame, creds):
+def carregar_dados_no_bigquery(df: pd.DataFrame, creds, if_exists_mode: str):
     """
     Carrega um DataFrame do Pandas em uma tabela do BigQuery.
     """
@@ -92,7 +82,7 @@ def carregar_dados_no_bigquery(df: pd.DataFrame, creds):
             destination_table=TABLE_ID,
             project_id=project_id,
             credentials=creds,
-            if_exists='append'
+            if_exists=if_exists_mode  # <-- MUDANÇA IMPORTANTE AQUI
         )
         return True
     except Exception as e:
@@ -100,8 +90,11 @@ def carregar_dados_no_bigquery(df: pd.DataFrame, creds):
         return False
 
 
-def autenticar_e_carregar(df):
+def autenticar_e_carregar(df, if_exists_mode='append'):
+    """
+    Função unificada que autentica e carrega os dados com o modo especificado.
+    """
     creds = autenticar_com_service_account()
     if creds:
-        return carregar_dados_no_bigquery(df, creds)
+        return carregar_dados_no_bigquery(df, creds, if_exists_mode)
     return False
