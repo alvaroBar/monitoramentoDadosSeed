@@ -1,7 +1,7 @@
 # ==============================================================================
 # PÁGINA 3: BACKUP DE DADOS
 # Esta página permite ao usuário baixar um backup completo da tabela
-# do BigQuery no formato CSV (otimizado para evitar timeouts).
+# do BigQuery nos formatos CSV ou Parquet (mais eficiente).
 # ==============================================================================
 
 import streamlit as st
@@ -17,45 +17,65 @@ st.title("📥 Backup dos Dados do BigQuery")
 
 st.info(
     "Use esta página para baixar uma cópia de segurança completa de todos os dados "
-    "atualmente armazenados na tabela `relatorios_lrco` no formato CSV."
+    "atualmente armazenados na tabela `relatorios_lrco`."
 )
 
-if st.button("Baixar Backup Completo (CSV)"):
+if st.button("Buscar Dados para Backup"):
     creds = autenticar_com_service_account()
     if creds:
         with st.spinner("Buscando todos os dados no BigQuery... Isso pode levar um momento."):
             df_backup = get_all_data_from_bq(creds)
 
         if not df_backup.empty:
-            st.success(f"Sucesso! {len(df_backup)} registros encontrados.")
-
-            # --- CORREÇÃO AQUI ---
-            # Converte as colunas de data/hora para texto. Isso transforma os valores nulos (NaT) na string 'NaT'.
-            df_backup['REGISTRO_DE_AULA'] = df_backup['REGISTRO_DE_AULA'].astype(str)
-            df_backup['REGISTRO_DE_CONTEUDO'] = df_backup['REGISTRO_DE_CONTEUDO'].astype(str)
-
-            # Agora, substitui a string 'NaT' pelo texto desejado usando o método .str.replace()
-            df_backup['REGISTRO_DE_AULA'] = df_backup['REGISTRO_DE_AULA'].str.replace('NaT', 'Sem registro',
-                                                                                      regex=False)
-            df_backup['REGISTRO_DE_CONTEUDO'] = df_backup['REGISTRO_DE_CONTEUDO'].str.replace('NaT', 'Sem registro',
-                                                                                              regex=False)
-
-            # --- Lógica Otimizada para CSV ---
-            # Converte o DataFrame para CSV em memória, que é uma operação muito rápida.
-            csv_data = df_backup.to_csv(index=False).encode('utf-8')
-
-            # Gera um nome de arquivo com a data e hora atuais
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            file_name = f"backup_relatorios_lrco_{timestamp}.csv"
-
-            # Cria o botão de download para o arquivo CSV
-            st.download_button(
-                label="Clique aqui para baixar o arquivo CSV",
-                data=csv_data,
-                file_name=file_name,
-                mime='text/csv',
-            )
+            st.success(f"Sucesso! {len(df_backup)} registros encontrados e prontos para download.")
+            st.session_state.df_backup = df_backup  # Armazena o dataframe no estado da sessão
         else:
             st.warning("Nenhum dado foi encontrado no BigQuery ou ocorreu um erro na busca.")
     else:
         st.error("Falha na autenticação. Verifique as credenciais da Conta de Serviço.")
+
+# --- Seção de Download ---
+# Só mostra os botões se os dados já tiverem sido buscados
+if 'df_backup' in st.session_state and not st.session_state.df_backup.empty:
+    st.markdown("---")
+    st.subheader("Escolha o formato para baixar:")
+
+    df_download = st.session_state.df_backup.copy()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    col1, col2 = st.columns(2)
+
+    # --- Opção 1: Download em CSV (com substituição de 'NaT') ---
+    with col1:
+        st.markdown("##### Formato CSV (Texto, bom para Excel)")
+
+        # Prepara os dados para o CSV
+        df_csv = df_download.copy()
+        df_csv['REGISTRO_DE_AULA'] = df_csv['REGISTRO_DE_AULA'].astype(str).str.replace('NaT', 'Sem registro',
+                                                                                        regex=False)
+        df_csv['REGISTRO_DE_CONTEUDO'] = df_csv['REGISTRO_DE_CONTEUDO'].astype(str).str.replace('NaT', 'Sem registro',
+                                                                                                regex=False)
+        csv_data = df_csv.to_csv(index=False).encode('utf-8')
+
+        st.download_button(
+            label="Baixar .csv",
+            data=csv_data,
+            file_name=f"backup_relatorios_lrco_{timestamp}.csv",
+            mime='text/csv',
+            use_container_width=True
+        )
+
+    # --- Opção 2: Download em Parquet (Leve e Rápido) ---
+    with col2:
+        st.markdown("##### Formato Parquet (Comprimido, mais rápido)")
+
+        # Converte o DataFrame para Parquet em memória
+        parquet_data = df_download.to_parquet(engine='pyarrow')
+
+        st.download_button(
+            label="Baixar .parquet",
+            data=parquet_data,
+            file_name=f"backup_relatorios_lrco_{timestamp}.parquet",
+            mime='application/octet-stream',
+            use_container_width=True
+        )
