@@ -36,6 +36,13 @@ except AttributeError:
     st.write("Conteúdo atual dos segredos que o Streamlit está vendo:", st.secrets.to_dict())
     st.stop()
 
+# --- NOVO BLOCO DE DEPURAÇÃO DA REDIRECT_URI ---
+st.warning(f"**Para Depuração:** A `redirect_uri` que está a ser usada é: `{REDIRECT_URI}`")
+st.info(
+    "Copie esta URL exatamente como aparece e cole-a na configuração de 'URIs de redirecionamento autorizados' no Google Cloud Console.")
+# --- FIM DO NOVO BLOCO ---
+
+
 SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
