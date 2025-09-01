@@ -49,7 +49,7 @@ else:
     st.subheader("Passo 2: Prepare e baixe os dados")
     if st.button("Preparar Dados para Download"):
         weeks_to_fetch = selected_weeks if selected_weeks else None
-        with st.spinner("Buscando dados no BigQuery..."):
+        with st.spinner("Buscando dados no BigQuery... (Isso pode levar um tempo)"):
             st.session_state.df_backup = get_all_data_from_bq(creds, dataset_id, weeks=weeks_to_fetch)
         if st.session_state.df_backup.empty:
             st.warning("Nenhum dado encontrado para a seleção.")

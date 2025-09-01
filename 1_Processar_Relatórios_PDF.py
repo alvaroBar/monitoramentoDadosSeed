@@ -7,7 +7,6 @@ import streamlit as st
 import pandas as pd
 import re
 import pdfplumber
-from io import BytesIO
 
 # Importa as funções do nosso módulo loader
 from bigquery_loader import (
