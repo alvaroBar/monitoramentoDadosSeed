@@ -49,7 +49,9 @@ TABLE_NAME = "relatorios_lrco"  # O nome da tabela é o mesmo em todos os datase
 
 def get_google_auth_flow():
     """Cria e retorna o objeto de fluxo de autenticação do Google."""
-    return Flow.from_client_secrets_config(
+    # --- CORREÇÃO AQUI ---
+    # O nome correto do método é from_client_config
+    return Flow.from_client_config(
         client_config={
             "web": {
                 "client_id": CLIENT_ID,
