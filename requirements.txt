@@ -1,7 +1,7 @@
 streamlit
 pdfplumber
 pandas
-openplxl
+openpyxl
 google-cloud-bigquery
 pandas-gbq
 google-auth-oauthlib
