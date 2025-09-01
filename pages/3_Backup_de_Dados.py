@@ -1,118 +1,115 @@
-# ==============================================================================
-# ARQUIVO COMPLETO: pages/3_Backup_de_Dados.py (Versão Multilocatário)
-# Página para baixar backups dos dados do BigQuery.
-# ==============================================================================
-
 import streamlit as st
 import pandas as pd
 from bigquery_loader import autenticar_usuario, get_available_weeks, get_all_data_from_bq
 
 st.set_page_config(layout="wide")
-st.title("Página de Backup de Dados")
-st.info("Use esta página para baixar um backup dos dados armazenados no seu banco de dados do BigQuery.")
+st.title("Backup de Dados do BigQuery")
 
-# --- Lógica de Autenticação e Mapeamento ---
 autenticar_usuario()
 
 if 'user_info' not in st.session_state:
-    st.info("Por favor, faça login com sua conta Google para continuar.")
+    st.info("Por favor, faça login com a sua conta Google para continuar.")
     st.stop()
 
-user_email = st.session_state.user_info.get("email", "Email não encontrado")
-user_name = st.session_state.user_info.get("name", "Usuário")
+# --- Lógica da Aplicação (Visível apenas após o login) ---
+user_info = st.session_state.user_info
+user_email = user_info.get("email")
+user_name = user_info.get("name", "Usuário")
 
-OFFICE_MAPPING = st.secrets.get("office_mapping", {})
-if user_email not in OFFICE_MAPPING:
-    st.error(f"ERRO: O e-mail '{user_email}' não está autorizado. Contate o administrador para obter acesso.")
+# --- CORREÇÃO: Mapeia o e-mail para o dataset_id em cada execução ---
+try:
+    office_mapping = st.secrets.office_mapping
+    if user_email in office_mapping:
+        st.session_state.dataset_id = office_mapping[user_email]
+    else:
+        st.error(f"ERRO: O e-mail '{user_email}' não está autorizado. Contate o administrador.")
+        st.stop()
+except (AttributeError, KeyError):
+    st.error("ERRO DE CONFIGURAÇÃO: O mapeamento de escritórios [office_mapping] não foi encontrado nos Segredos do Streamlit.")
     st.stop()
 
-dataset_id = OFFICE_MAPPING[user_email]
+with st.sidebar:
+    st.subheader(f"Olá, {user_name}!")
+    if st.button("Logout"):
+        st.session_state.clear()
+        st.rerun()
 
-# --- Interface da Barra Lateral ---
-st.sidebar.success(f"Olá, {user_name}!")
-if st.sidebar.button("Logout"):
-    del st.session_state.credentials
-    if 'user_info' in st.session_state:
-        del st.session_state.user_info
-    st.rerun()
-
-# --- Lógica da Página ---
+# --- Lógica de Estado para o fluxo da página ---
 if 'backup_data' not in st.session_state:
     st.session_state.backup_data = None
 
-st.markdown("---")
-st.subheader("Passo 1: Selecione as Semanas e Busque os Dados")
+st.header("Passo 1: Selecione as Semanas para o Backup")
+
+creds = st.session_state.credentials
+dataset_id = st.session_state.dataset_id
 
 try:
-    with st.spinner("Buscando semanas disponíveis no seu dataset..."):
-        semanas_disponiveis = get_available_weeks(st.session_state.credentials, dataset_id)
+    with st.spinner("Buscando semanas disponíveis no BigQuery..."):
+        available_weeks = get_available_weeks(creds, dataset_id)
 
-    if not semanas_disponiveis:
-        st.warning("Nenhum dado encontrado no seu banco de dados para backup.")
+    if available_weeks:
+        selected_weeks = st.multiselect(
+            "Selecione as semanas que deseja incluir no backup (deixe em branco para todas):",
+            options=available_weeks,
+            default=[]
+        )
+
+        if st.button("Buscar Dados para Backup", use_container_width=True):
+            week_filter = selected_weeks if selected_weeks else None
+            with st.spinner("Buscando dados do BigQuery... Isso pode levar um tempo."):
+                df_backup = get_all_data_from_bq(creds, dataset_id, week_filter=week_filter)
+                if not df_backup.empty:
+                    st.session_state.backup_data = df_backup
+                    st.rerun()
+                else:
+                    st.warning("Nenhum dado encontrado para as semanas selecionadas.")
+
     else:
-        todas_as_semanas = st.checkbox("Selecionar todas as semanas")
+        st.info("Nenhuma semana encontrada no banco de dados para este usuário.")
 
-        if todas_as_semanas:
-            semanas_selecionadas = st.multiselect(
-                "Semanas a serem incluídas no backup:",
-                options=semanas_disponiveis,
-                default=semanas_disponiveis,
-                disabled=True
-            )
-        else:
-            semanas_selecionadas = st.multiselect(
-                "Semanas a serem incluídas no backup:",
-                options=semanas_disponiveis
-            )
-
-        if st.button("Buscar Dados para Backup"):
-            if not semanas_selecionadas:
-                st.error("Por favor, selecione pelo menos uma semana.")
-            else:
-                with st.spinner(f"Buscando dados das semanas selecionadas... Isso pode demorar um pouco."):
-                    df_backup = get_all_data_from_bq(st.session_state.credentials, dataset_id, semanas_selecionadas)
-                    if not df_backup.empty:
-                        st.session_state.backup_data = df_backup
-                        st.rerun()
-                    else:
-                        st.warning("Nenhum dado encontrado para as semanas selecionadas.")
 except Exception as e:
-    st.error(f"Ocorreu um erro ao buscar as semanas: {e}")
+    st.error(f"Não foi possível buscar as semanas do BigQuery. Erro: {e}")
 
+
+# --- Passo 2: Download dos Dados ---
 if st.session_state.backup_data is not None:
-    st.markdown("---")
-    st.subheader("Passo 2: Baixe o Arquivo de Backup")
-    st.success(f"{len(st.session_state.backup_data)} registros prontos para download.")
-    st.dataframe(st.session_state.backup_data.head())
+    df_backup = st.session_state.backup_data
+    st.success(f"✅ Dados prontos! {len(df_backup)} registros foram encontrados.")
+    st.dataframe(df_backup.head())
 
-    # --- Lógica de Download ---
-    df_para_download = st.session_state.backup_data.copy()
+    st.header("Passo 2: Escolha o Formato do Backup")
 
-    # Opção 1: CSV (Rápido e leve)
-    df_csv = df_para_download.copy()
-    for col in ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']:
-        # Converte a coluna para string para poder usar .str
-        df_csv[col] = df_csv[col].astype(str).str.replace('NaT', 'Sem registro', regex=False)
+    col1, col2 = st.columns(2)
 
-    csv_data = df_csv.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="📥 Baixar Backup em formato .csv (Recomendado)",
-        data=csv_data,
-        file_name=f"backup_semanas_{dataset_id}.csv",
-        mime="text/csv",
-        use_container_width=True
-    )
+    with col1:
+        # Lógica para CSV
+        df_csv = df_backup.copy()
 
-    # Opção 2: Parquet (Eficiente)
-    parquet_data = df_para_download.to_parquet(engine='pyarrow')
-    st.download_button(
-        label="📦 Baixar Backup em formato .parquet (Menor e mais rápido)",
-        data=parquet_data,
-        file_name=f"backup_semanas_{dataset_id}.parquet",
-        mime="application/octet-stream",
-        use_container_width=True
-    )
+        cols_to_fill = ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']
+        for col in cols_to_fill:
+            if col in df_csv.columns:
+                df_csv[col] = df_csv[col].astype(str).replace('NaT', 'Sem registro')
 
-    if st.button("Limpar e Começar de Novo"):
+        csv_data = df_csv.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Baixar Backup em .csv",
+            data=csv_data,
+            file_name="backup_relatorios.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+
+    with col2:
+        # Lógica para Parquet
+        parquet_data = df_backup.to_parquet(index=False)
+        st.download_button(
+            label="⚡️ Baixar Backup em .parquet (Mais Rápido/Leve)",
+            data=parquet_data,
+            file_name="backup_relatorios.parquet",
+            mime="application/octet-stream",
+            use_container_width=True
+        )
+
+    if st.button("Limpar e Iniciar Nova Busca", use_container_width=True):
         st.session_state.backup_data = None
         st.rerun()

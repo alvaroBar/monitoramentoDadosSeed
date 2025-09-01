@@ -1,13 +1,13 @@
 # ==============================================================================
 # ARQUIVO PRINCIPAL: 1_Processar_Relatórios_PDF.py
-# Adicionada barra de progresso e estimativa de tempo para o processamento de PDFs.
+# Corrigido o bug de AttributeError para dataset_id.
 # ==============================================================================
 
 import streamlit as st
 import pdfplumber
 import pandas as pd
 import re
-import time  # Importa a biblioteca de tempo
+import time
 
 # Importa as funções necessárias do nosso módulo loader
 from bigquery_loader import autenticar_usuario, get_latest_week, carregar_dados_no_bigquery
@@ -42,7 +42,6 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, sta
     semana = 0
 
     for i, arquivo_pdf in enumerate(lista_de_arquivos_pdf):
-        # --- Lógica da Barra de Progresso ---
         progresso_atual = (i + 1) / total_arquivos
         tempo_decorrido = time.time() - tempo_inicio
         tempo_medio_por_arquivo = tempo_decorrido / (i + 1)
@@ -108,8 +107,8 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, sta
                         registro_conteudo
                     ])
 
-    status_text.empty()  # Limpa o texto de status
-    progress_bar.empty()  # Limpa a barra de progresso
+    status_text.empty()
+    progress_bar.empty()
 
     colunas = [
         "SEMANA", "DATA_DO_RELATORIO", "MUNICIPIO", "ESCOLA", "TURMA",
@@ -132,7 +131,21 @@ if 'user_info' not in st.session_state:
 
 # --- Lógica da Aplicação (Visível apenas após o login) ---
 user_info = st.session_state.user_info
+user_email = user_info.get("email")
 user_name = user_info.get("name", "Usuário")
+
+# --- CORREÇÃO: Mapeia o e-mail para o dataset_id em cada execução ---
+try:
+    office_mapping = st.secrets.office_mapping
+    if user_email in office_mapping:
+        st.session_state.dataset_id = office_mapping[user_email]
+    else:
+        st.error(f"ERRO: O e-mail '{user_email}' não está autorizado. Contate o administrador.")
+        st.stop()
+except (AttributeError, KeyError):
+    st.error(
+        "ERRO DE CONFIGURAÇÃO: O mapeamento de escritórios [office_mapping] não foi encontrado nos Segredos do Streamlit.")
+    st.stop()
 
 with st.sidebar:
     st.subheader(f"Olá, {user_name}!")
@@ -161,7 +174,6 @@ if st.session_state.etapa == "upload":
                 lista_disciplinas_validas = [str(d).strip().upper() for d in
                                              disciplinas_df.iloc[:, 0].dropna().unique()]
 
-                # Cria os placeholders para a barra de progresso e o texto
                 progress_bar = st.progress(0, text="Iniciando processamento...")
                 status_text = st.empty()
 
@@ -184,7 +196,6 @@ elif st.session_state.etapa == "configurar_envio":
 
     st.header("Passo 2: Configure e Envie os Dados")
 
-    # Busca a última semana e sugere a próxima
     creds = st.session_state.credentials
     dataset_id = st.session_state.dataset_id
     ultima_semana = get_latest_week(creds, dataset_id)
@@ -199,7 +210,6 @@ elif st.session_state.etapa == "configurar_envio":
             min_value=1, value=semana_sugerida, step=1
         )
 
-    # Filtro de Disciplinas
     disciplinas_encontradas = sorted(df_processado['DISCIPLINA'].unique())
     disciplinas_selecionadas = st.multiselect(
         "Selecione as disciplinas que deseja enviar:",
@@ -235,7 +245,6 @@ elif st.session_state.etapa == "sucesso":
     st.balloons()
 
     if st.button("Iniciar Novo Lançamento", use_container_width=True):
-        # Limpa o estado para recomeçar o fluxo
         st.session_state.etapa = "upload"
         st.session_state.df_processado = pd.DataFrame()
         st.rerun()
