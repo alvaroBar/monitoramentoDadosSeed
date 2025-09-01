@@ -1,6 +1,6 @@
 # ==============================================================================
-# ARQUIVO CORRIGIDO: bigquery_loader.py (Versão Multilocatário)
-# Corrigido o erro 'Credentials' object has no attribute 'project_id'.
+# ARQUIVO FINAL: bigquery_loader.py (Versão Multilocatário)
+# Versão de produção, sem o modo de transporte inseguro.
 # ==============================================================================
 
 import streamlit as st
@@ -18,12 +18,12 @@ try:
     CLIENT_ID = st.secrets.google_oauth.client_id
     CLIENT_SECRET = st.secrets.google_oauth.client_secret
     REDIRECT_URI = st.secrets.google_oauth.redirect_uri
-    PROJECT_ID = st.secrets.google_oauth.project_id  # Lendo o ID do projeto dos segredos
+    PROJECT_ID = st.secrets.google_oauth.project_id
     SCOPES = [
         "https://www.googleapis.com/auth/userinfo.email",
-        "https.www.googleapis.com/auth/userinfo.profile",
+        "https://www.googleapis.com/auth/userinfo.profile",
         "openid",
-        "https.www.googleapis.com/auth/cloud-platform"
+        "https://www.googleapis.com/auth/cloud-platform"
     ]
 except (AttributeError, KeyError):
     CLIENT_ID = None
@@ -44,8 +44,8 @@ def get_google_auth_flow():
             "web": {
                 "client_id": CLIENT_ID,
                 "client_secret": CLIENT_SECRET,
-                "auth_uri": "https.accounts.google.com/o/oauth2/auth",
-                "token_uri": "https.oauth2.googleapis.com/token",
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
                 "redirect_uris": [REDIRECT_URI],
             }
         },
@@ -66,7 +66,7 @@ def autenticar_usuario():
                 creds = flow.credentials
                 st.session_state.credentials = creds
 
-                user_info_endpoint = 'https.www.googleapis.com/oauth2/v1/userinfo'
+                user_info_endpoint = 'https://www.googleapis.com/oauth2/v1/userinfo'
                 headers = {'Authorization': f'Bearer {creds.token}'}
                 user_info = requests.get(user_info_endpoint, headers=headers).json()
                 st.session_state.user_info = user_info
@@ -82,7 +82,7 @@ def autenticar_usuario():
                 st.link_button("Login com Google", auth_url, use_container_width=True)
 
 
-# --- Funções de Interação com o BigQuery ---
+# --- Funções de Interação com o BigQuery (sem alterações) ---
 
 def get_latest_week(creds, dataset_id):
     """Busca o maior número de semana na tabela do BigQuery."""
