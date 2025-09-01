@@ -1,15 +1,15 @@
 # ==============================================================================
 # ARQUIVO COMPLETO: pages/3_Backup_de_Dados.py (Versão Multilocatário)
+# Página para baixar backups dos dados do BigQuery.
 # ==============================================================================
 
 import streamlit as st
 import pandas as pd
-from datetime import datetime
-from io import BytesIO
 from bigquery_loader import autenticar_usuario, get_available_weeks, get_all_data_from_bq
 
 st.set_page_config(layout="wide")
-st.title("📥 Backup dos Dados do BigQuery")
+st.title("Página de Backup de Dados")
+st.info("Use esta página para baixar um backup dos dados armazenados no seu banco de dados do BigQuery.")
 
 # --- Lógica de Autenticação e Mapeamento ---
 autenticar_usuario()
@@ -18,64 +18,101 @@ if 'user_info' not in st.session_state:
     st.info("Por favor, faça login com sua conta Google para continuar.")
     st.stop()
 
-user_email = st.session_state.user_info['email']
-creds = st.session_state.credentials
+user_email = st.session_state.user_info.get("email", "Email não encontrado")
+user_name = st.session_state.user_info.get("name", "Usuário")
 
-try:
-    dataset_id = st.secrets.office_mapping[user_email]
-except KeyError:
-    st.error(f"O e-mail **{user_email}** não está autorizado a usar esta funcionalidade.")
+OFFICE_MAPPING = st.secrets.get("office_mapping", {})
+if user_email not in OFFICE_MAPPING:
+    st.error(f"ERRO: O e-mail '{user_email}' não está autorizado. Contate o administrador para obter acesso.")
     st.stop()
 
-st.sidebar.success(f"Logado como: **{user_email}**")
-st.sidebar.info(f"Dataset: **{dataset_id}**")
-if st.sidebar.button("Logout", key="logout_backup"):
+dataset_id = OFFICE_MAPPING[user_email]
+
+# --- Interface da Barra Lateral ---
+st.sidebar.success(f"Olá, {user_name}!")
+if st.sidebar.button("Logout"):
     del st.session_state.credentials
-    if 'user_info' in st.session_state: del st.session_state.user_info
+    if 'user_info' in st.session_state:
+        del st.session_state.user_info
     st.rerun()
 
-# --- Lógica da Página de Backup ---
-st.info("Use esta página para baixar uma cópia de segurança dos seus dados.")
+# --- Lógica da Página ---
+if 'backup_data' not in st.session_state:
+    st.session_state.backup_data = None
 
-with st.spinner("Buscando semanas disponíveis..."):
-    available_weeks = get_available_weeks(creds, dataset_id)
+st.markdown("---")
+st.subheader("Passo 1: Selecione as Semanas e Busque os Dados")
 
-if not available_weeks:
-    st.warning("Nenhuma semana encontrada para o seu usuário.")
-else:
-    st.subheader("Passo 1: Selecione as semanas para o backup")
-    selected_weeks = st.multiselect("Deixe em branco para baixar o backup completo.", options=available_weeks)
+try:
+    with st.spinner("Buscando semanas disponíveis no seu dataset..."):
+        semanas_disponiveis = get_available_weeks(st.session_state.credentials, dataset_id)
 
-    st.subheader("Passo 2: Prepare e baixe os dados")
-    if st.button("Preparar Dados para Download"):
-        weeks_to_fetch = selected_weeks if selected_weeks else None
-        with st.spinner("Buscando dados no BigQuery... (Isso pode levar um tempo)"):
-            st.session_state.df_backup = get_all_data_from_bq(creds, dataset_id, weeks=weeks_to_fetch)
-        if st.session_state.df_backup.empty:
-            st.warning("Nenhum dado encontrado para a seleção.")
+    if not semanas_disponiveis:
+        st.warning("Nenhum dado encontrado no seu banco de dados para backup.")
+    else:
+        todas_as_semanas = st.checkbox("Selecionar todas as semanas")
 
-if 'df_backup' in st.session_state and not st.session_state.df_backup.empty:
+        if todas_as_semanas:
+            semanas_selecionadas = st.multiselect(
+                "Semanas a serem incluídas no backup:",
+                options=semanas_disponiveis,
+                default=semanas_disponiveis,
+                disabled=True
+            )
+        else:
+            semanas_selecionadas = st.multiselect(
+                "Semanas a serem incluídas no backup:",
+                options=semanas_disponiveis
+            )
+
+        if st.button("Buscar Dados para Backup"):
+            if not semanas_selecionadas:
+                st.error("Por favor, selecione pelo menos uma semana.")
+            else:
+                with st.spinner(f"Buscando dados das semanas selecionadas... Isso pode demorar um pouco."):
+                    df_backup = get_all_data_from_bq(st.session_state.credentials, dataset_id, semanas_selecionadas)
+                    if not df_backup.empty:
+                        st.session_state.backup_data = df_backup
+                        st.rerun()
+                    else:
+                        st.warning("Nenhum dado encontrado para as semanas selecionadas.")
+except Exception as e:
+    st.error(f"Ocorreu um erro ao buscar as semanas: {e}")
+
+if st.session_state.backup_data is not None:
     st.markdown("---")
-    st.subheader("Dados Prontos. Escolha o formato para baixar:")
+    st.subheader("Passo 2: Baixe o Arquivo de Backup")
+    st.success(f"{len(st.session_state.backup_data)} registros prontos para download.")
+    st.dataframe(st.session_state.backup_data.head())
 
-    df_download = st.session_state.df_backup.copy()
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    col1, col2 = st.columns(2)
+    # --- Lógica de Download ---
+    df_para_download = st.session_state.backup_data.copy()
 
-    with col1:
-        st.markdown("##### Formato CSV (Texto, bom para Excel)")
-        df_csv = df_download.copy()
-        df_csv['REGISTRO_DE_AULA'] = df_csv['REGISTRO_DE_AULA'].astype(str).str.replace('NaT', 'Sem registro',
-                                                                                        regex=False)
-        df_csv['REGISTRO_DE_CONTEUDO'] = df_csv['REGISTRO_DE_CONTEUDO'].astype(str).str.replace('NaT', 'Sem registro',
-                                                                                                regex=False)
-        csv_data = df_csv.to_csv(index=False).encode('utf-8')
-        st.download_button(label="Baixar .csv", data=csv_data, file_name=f"backup_relatorios_lrco_{timestamp}.csv",
-                           mime='text/csv', use_container_width=True)
+    # Opção 1: CSV (Rápido e leve)
+    df_csv = df_para_download.copy()
+    for col in ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']:
+        # Converte a coluna para string para poder usar .str
+        df_csv[col] = df_csv[col].astype(str).str.replace('NaT', 'Sem registro', regex=False)
 
-    with col2:
-        st.markdown("##### Formato Parquet (Comprimido, mais rápido)")
-        parquet_data = df_download.to_parquet(engine='pyarrow')
-        st.download_button(label="Baixar .parquet", data=parquet_data,
-                           file_name=f"backup_relatorios_lrco_{timestamp}.parquet", mime='application/octet-stream',
-                           use_container_width=True)
+    csv_data = df_csv.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="📥 Baixar Backup em formato .csv (Recomendado)",
+        data=csv_data,
+        file_name=f"backup_semanas_{dataset_id}.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
+
+    # Opção 2: Parquet (Eficiente)
+    parquet_data = df_para_download.to_parquet(engine='pyarrow')
+    st.download_button(
+        label="📦 Baixar Backup em formato .parquet (Menor e mais rápido)",
+        data=parquet_data,
+        file_name=f"backup_semanas_{dataset_id}.parquet",
+        mime="application/octet-stream",
+        use_container_width=True
+    )
+
+    if st.button("Limpar e Começar de Novo"):
+        st.session_state.backup_data = None
+        st.rerun()

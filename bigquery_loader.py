@@ -1,5 +1,5 @@
 # ==============================================================================
-# ARQUIVO COMPLETO: bigquery_loader.py (Versão Multilocatário com Depuração)
+# ARQUIVO COMPLETO: bigquery_loader.py (Versão Multilocatário)
 # Todas as funções agora recebem um 'dataset_id' para operar no
 # conjunto de dados correto do usuário.
 # ==============================================================================
@@ -11,37 +11,24 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 import requests
 
-# --- Bloco de Verificação e Depuração dos Segredos ---
-# Esta nova seção irá nos mostrar exatamente o que o Streamlit está lendo.
-
+# --- Bloco de Verificação dos Segredos ---
 if "google_oauth" not in st.secrets:
     st.error("ERRO DE CONFIGURAÇÃO: A seção [google_oauth] não foi encontrada nos Segredos do Streamlit.")
     st.info(
         "Por favor, verifique se o cabeçalho `[google_oauth]` está presente e escrito corretamente nos seus segredos.")
-    # A linha abaixo é para depuração. Ela mostra todo o conteúdo que o Streamlit conseguiu ler.
-    st.write("Conteúdo atual dos segredos que o Streamlit está vendo:", st.secrets.to_dict())
     st.stop()
 
 try:
     CLIENT_ID = st.secrets.google_oauth.client_id
     CLIENT_SECRET = st.secrets.google_oauth.client_secret
     REDIRECT_URI = st.secrets.google_oauth.redirect_uri
-    # Verifica se as chaves essenciais dentro da seção existem
     if not all([CLIENT_ID, CLIENT_SECRET, REDIRECT_URI]):
         st.error(
             "ERRO DE CONFIGURAÇÃO: Uma ou mais chaves (client_id, client_secret, redirect_uri) estão faltando dentro da seção [google_oauth].")
         st.stop()
 except AttributeError:
     st.error("ERRO DE CONFIGURAÇÃO: A seção [google_oauth] parece estar mal formatada nos Segredos do Streamlit.")
-    st.write("Conteúdo atual dos segredos que o Streamlit está vendo:", st.secrets.to_dict())
     st.stop()
-
-# --- NOVO BLOCO DE DEPURAÇÃO DA REDIRECT_URI ---
-st.warning(f"**Para Depuração:** A `redirect_uri` que está a ser usada é: `{REDIRECT_URI}`")
-st.info(
-    "Copie esta URL exatamente como aparece e cole-a na configuração de 'URIs de redirecionamento autorizados' no Google Cloud Console.")
-# --- FIM DO NOVO BLOCO ---
-
 
 SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
@@ -56,8 +43,6 @@ TABLE_NAME = "relatorios_lrco"  # O nome da tabela é o mesmo em todos os datase
 
 def get_google_auth_flow():
     """Cria e retorna o objeto de fluxo de autenticação do Google."""
-    # --- CORREÇÃO AQUI ---
-    # O nome correto do método é from_client_config
     return Flow.from_client_config(
         client_config={
             "web": {
@@ -80,7 +65,6 @@ def autenticar_usuario():
 
     if 'credentials' not in st.session_state:
         if not auth_code:
-            auth_url, _ = flow.authorization_url(prompt="consent")
             st.link_button("Login com Google", auth_url, use_container_width=True)
             st.stop()
         else:
@@ -103,9 +87,13 @@ def autenticar_usuario():
                 st.session_state.user_info = user_info_req.json()
             else:  # Token inválido ou expirado
                 del st.session_state.credentials
+                if 'user_info' in st.session_state:
+                    del st.session_state.user_info
                 st.rerun()
         else:  # Credenciais inválidas
             del st.session_state.credentials
+            if 'user_info' in st.session_state:
+                del st.session_state.user_info
             st.rerun()
 
 
