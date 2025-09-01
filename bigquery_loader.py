@@ -1,5 +1,5 @@
 # ==============================================================================
-# ARQUIVO COMPLETO: bigquery_loader.py (Versão Multilocatário)
+# ARQUIVO COMPLETO: bigquery_loader.py (Versão Multilocatário com Depuração)
 # Todas as funções agora recebem um 'dataset_id' para operar no
 # conjunto de dados correto do usuário.
 # ==============================================================================
@@ -11,13 +11,29 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 import requests
 
-# --- Configurações de Autenticação (lidas dos segredos) ---
+# --- Bloco de Verificação e Depuração dos Segredos ---
+# Esta nova seção irá nos mostrar exatamente o que o Streamlit está lendo.
+
+if "google_oauth" not in st.secrets:
+    st.error("ERRO DE CONFIGURAÇÃO: A seção [google_oauth] não foi encontrada nos Segredos do Streamlit.")
+    st.info(
+        "Por favor, verifique se o cabeçalho `[google_oauth]` está presente e escrito corretamente nos seus segredos.")
+    # A linha abaixo é para depuração. Ela mostra todo o conteúdo que o Streamlit conseguiu ler.
+    st.write("Conteúdo atual dos segredos que o Streamlit está vendo:", st.secrets.to_dict())
+    st.stop()
+
 try:
     CLIENT_ID = st.secrets.google_oauth.client_id
     CLIENT_SECRET = st.secrets.google_oauth.client_secret
     REDIRECT_URI = st.secrets.google_oauth.redirect_uri
-except (AttributeError, KeyError):
-    st.error("As credenciais OAuth do Google não foram encontradas nos Segredos do Streamlit.")
+    # Verifica se as chaves essenciais dentro da seção existem
+    if not all([CLIENT_ID, CLIENT_SECRET, REDIRECT_URI]):
+        st.error(
+            "ERRO DE CONFIGURAÇÃO: Uma ou mais chaves (client_id, client_secret, redirect_uri) estão faltando dentro da seção [google_oauth].")
+        st.stop()
+except AttributeError:
+    st.error("ERRO DE CONFIGURAÇÃO: A seção [google_oauth] parece estar mal formatada nos Segredos do Streamlit.")
+    st.write("Conteúdo atual dos segredos que o Streamlit está vendo:", st.secrets.to_dict())
     st.stop()
 
 SCOPES = [
