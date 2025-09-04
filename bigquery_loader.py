@@ -3,10 +3,9 @@ import pandas as pd
 import pandas_gbq
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
-import os
+from googleapiclient.discovery import build  # Importação necessária
 
 # --- Configurações de Autenticação (Lidas dos Segredos do Streamlit) ---
-# ... (bloco try/except inalterado)
 try:
     CLIENT_ID = st.secrets.google_oauth.client_id
     CLIENT_SECRET = st.secrets.google_oauth.client_secret
@@ -34,7 +33,7 @@ def get_google_auth_flow():
                 "client_id": CLIENT_ID,
                 "client_secret": CLIENT_SECRET,
                 "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://accounts.google.com/o/oauth2/token",
+                "token_uri": "https://oauth2.googleapis.com/token",
                 "redirect_uri": REDIRECT_URI,
             }
         },
@@ -52,13 +51,15 @@ def autenticar_usuario():
         if auth_code:
             try:
                 flow.fetch_token(code=auth_code)
-                st.session_state.credentials = flow.credentials
-                # Usamos uma consulta dummy para obter as informações do usuário de forma segura
-                user_info = pd.read_gbq(
-                    "SELECT 1",
-                    project_id=PROJECT_ID,
-                    credentials=st.session_state.credentials
-                )._query_results.client.get_user_info()
+                creds = flow.credentials
+                st.session_state.credentials = creds
+
+                # --- MUDANÇA CRÍTICA AQUI ---
+                # Método robusto para obter as informações do usuário
+                # usando a API oficial do Google, em vez de um método interno.
+                oauth2_service = build('oauth2', 'v2', credentials=creds)
+                user_info = oauth2_service.userinfo().get().execute()
+
                 st.session_state.user_info = user_info
                 st.query_params.clear()
                 st.rerun()
@@ -66,15 +67,14 @@ def autenticar_usuario():
                 st.error(f"Erro ao obter o token de acesso: {e}")
                 st.stop()
         else:
-            # --- MUDANÇA CRÍTICA AQUI ---
-            # O prompt="select_account" força o Google a mostrar a tela de seleção de contas.
+            # Força o Google a mostrar a tela de seleção de contas.
             auth_url, _ = flow.authorization_url(prompt="select_account")
             st.link_button("Login com Google", auth_url, use_container_width=True)
             st.stop()
 
 
 # --- Funções de Interação com o BigQuery (inalteradas) ---
-# ...
+
 def get_dashboard_stats(creds, dataset_id):
     """
     Busca estatísticas agregadas do BigQuery para o dashboard.
