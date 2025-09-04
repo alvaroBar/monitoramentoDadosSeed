@@ -68,28 +68,11 @@ def autenticar_usuario():
             auth_url, _ = flow.authorization_url(prompt="select_account")
 
             # --- CORREÇÃO APLICADA AQUI ---
-            # Usa um link <a> estilizado como um botão, que é mais fiável.
-            st.markdown(
-                f'''
-                <a href="{auth_url}" target="_self" style="
-                    display: inline-block;
-                    padding: 0.6rem 1rem;
-                    background-color: #4CAF50;
-                    color: white;
-                    text-decoration: none;
-                    border-radius: 0.5rem;
-                    font-family: 'Source Sans Pro', sans-serif;
-                    font-size: 1rem;
-                    font-weight: 600;
-                    text-align: center;
-                    width: 100%;
-                    box-sizing: border-box;
-                ">
-                    Login com Google
-                </a>
-                ''',
-                unsafe_allow_html=True
-            )
+            # Usa o st.link_button, que é fiável, e melhora a experiência do usuário.
+            st.link_button("Login com Google", auth_url, use_container_width=True)
+            with st.spinner("Aguardando autenticação na nova aba... Esta página será atualizada automaticamente."):
+                st.info(
+                    "Uma nova aba foi aberta para o login com o Google. Após a autenticação, pode fechar a outra aba e voltar para esta.")
             st.stop()
 
 
