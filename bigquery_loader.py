@@ -55,8 +55,9 @@ def autenticar_usuario():
                 creds = flow.credentials
                 st.session_state.credentials = creds
 
-                oauth2_service = build('oauth2', 'v2', credentials=creds)
-                user_info = oauth2_service.userinfo().get().execute()
+                # Usa as credenciais obtidas para obter informações do usuário
+                user_info_service = build('oauth2', 'v2', credentials=creds)
+                user_info = user_info_service.userinfo().get().execute()
 
                 st.session_state.user_info = user_info
                 st.query_params.clear()
@@ -65,8 +66,10 @@ def autenticar_usuario():
                 st.error(f"Erro ao obter o token de acesso: {e}")
                 st.stop()
         else:
+            # Gera a URL de autorização
             auth_url, _ = flow.authorization_url(prompt="select_account")
 
+            # Usa um botão personalizado com st.markdown para forçar o redirecionamento na mesma aba
             st.markdown(
                 f'''
                 <a href="{auth_url}" target="_self" style="text-decoration: none;">
@@ -92,7 +95,7 @@ def autenticar_usuario():
             st.stop()
 
 
-# --- Funções de Interação com o BigQuery ---
+# --- Funções de Interação com o BigQuery (sem alterações) ---
 
 def get_dashboard_stats(creds, dataset_id):
     """
