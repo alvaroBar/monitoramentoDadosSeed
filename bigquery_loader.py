@@ -4,6 +4,7 @@ import pandas_gbq
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from google.cloud import bigquery
 
 # --- Configurações de Autenticação (Lidas dos Segredos do Streamlit) ---
 try:
@@ -66,13 +67,28 @@ def autenticar_usuario():
         else:
             auth_url, _ = flow.authorization_url(prompt="select_account")
 
-            # --- MUDANÇA CRÍTICA AQUI ---
-            # Voltamos a usar o st.link_button, que é o método mais fiável
-            # para garantir o redirecionamento. A experiência do usuário será
-            # a de clicar num botão que o leva para a página de login.
-            st.link_button("Login com Google", auth_url, use_container_width=True)
-
-            # Interrompe a execução para que o usuário veja apenas o botão de login.
+            st.markdown(
+                f'''
+                <a href="{auth_url}" target="_self" style="text-decoration: none;">
+                    <button style="
+                        width: 100%; 
+                        padding: 0.6rem 1rem; 
+                        background-color: #F63366; 
+                        color: white; 
+                        border: none; 
+                        border-radius: 0.5rem; 
+                        font-family: 'Source Sans Pro', sans-serif; 
+                        font-size: 1rem;
+                        font-weight: 600;
+                        cursor: pointer;
+                        transition: background-color 0.2s ease;
+                    ">
+                        Login com Google
+                    </button>
+                </a>
+                ''',
+                unsafe_allow_html=True
+            )
             st.stop()
 
 
@@ -215,3 +231,19 @@ def get_all_data_from_bq(creds, dataset_id, week_filter=None):
         return df
     except Exception:
         return pd.DataFrame()
+
+
+def delete_week_data(creds, dataset_id, week_to_delete):
+    """Apaga todos os registros de uma semana específica no BigQuery."""
+    try:
+        client = bigquery.Client(credentials=creds, project=PROJECT_ID)
+        table_ref = f"`{PROJECT_ID}.{dataset_id}.relatorios_lrco`"
+
+        delete_query = f"DELETE FROM {table_ref} WHERE SEMANA = {week_to_delete}"
+
+        query_job = client.query(delete_query)
+        query_job.result()
+
+        return True, f"Registros da semana {week_to_delete} apagados com sucesso."
+    except Exception as e:
+        return False, f"Erro ao apagar os dados da semana: {e}"
