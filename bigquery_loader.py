@@ -3,7 +3,7 @@ import pandas as pd
 import pandas_gbq
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build  # Importação necessária
+from googleapiclient.discovery import build
 
 # --- Configurações de Autenticação (Lidas dos Segredos do Streamlit) ---
 try:
@@ -54,9 +54,6 @@ def autenticar_usuario():
                 creds = flow.credentials
                 st.session_state.credentials = creds
 
-                # --- MUDANÇA CRÍTICA AQUI ---
-                # Método robusto para obter as informações do usuário
-                # usando a API oficial do Google, em vez de um método interno.
                 oauth2_service = build('oauth2', 'v2', credentials=creds)
                 user_info = oauth2_service.userinfo().get().execute()
 
@@ -67,62 +64,50 @@ def autenticar_usuario():
                 st.error(f"Erro ao obter o token de acesso: {e}")
                 st.stop()
         else:
-            # Força o Google a mostrar a tela de seleção de contas.
             auth_url, _ = flow.authorization_url(prompt="select_account")
             st.link_button("Login com Google", auth_url, use_container_width=True)
             st.stop()
 
 
-# --- Funções de Interação com o BigQuery (inalteradas) ---
+# --- Funções de Interação com o BigQuery ---
 
 def get_dashboard_stats(creds, dataset_id):
     """
     Busca estatísticas agregadas do BigQuery para o dashboard.
-    Executa uma única consulta otimizada para performance.
-    """
-    # --- MUDANÇA CRÍTICA AQUI ---
-    # A consulta foi reescrita para ser mais eficiente e evitar o erro de subquery.
-    sql_query = f"""
-    SELECT
-      (
-        SELECT AS STRUCT
-          COUNT(*) AS total_registros,
-          MAX(DATA_DO_RELATORIO) AS ultima_data,
-          COUNT(DISTINCT SEMANA) as total_semanas
-        FROM `{PROJECT_ID}.{dataset_id}.relatorios_lrco`
-      ) AS stats,
-      (
-        SELECT ARRAY_AGG(STRUCT(DISCIPLINA, contagem) ORDER BY contagem DESC)
-        FROM (
-          SELECT DISCIPLINA, COUNT(*) AS contagem
-          FROM `{PROJECT_ID}.{dataset_id}.relatorios_lrco`
-          GROUP BY DISCIPLINA
-          ORDER BY contagem DESC
-          LIMIT 5
-        )
-      ) AS top_disciplinas,
-      (
-        SELECT ARRAY_AGG(STRUCT(SEMANA, contagem) ORDER BY SEMANA)
-        FROM (
-          SELECT SEMANA, COUNT(*) AS contagem
-          FROM `{PROJECT_ID}.{dataset_id}.relatorios_lrco`
-          GROUP BY SEMANA
-        )
-      ) AS registros_por_semana
+    Usa consultas separadas para maior robustez.
     """
     try:
-        df_stats = pandas_gbq.read_gbq(sql_query, project_id=PROJECT_ID, credentials=creds)
+        # Consulta 1: Estatísticas gerais
+        stats_query = f"""
+            SELECT
+                COUNT(*) AS total_registros,
+                MAX(DATA_DO_RELATORIO) AS ultima_data,
+                COUNT(DISTINCT SEMANA) as total_semanas
+            FROM `{PROJECT_ID}.{dataset_id}.relatorios_lrco`
+        """
+        df_stats = pandas_gbq.read_gbq(stats_query, project_id=PROJECT_ID, credentials=creds)
+        stats_data = df_stats.to_dict('records')[0] if not df_stats.empty else {}
 
-        # Extrai os dados do formato complexo do BigQuery
-        stats_data = df_stats['stats'].iloc[0] if not df_stats.empty and 'stats' in df_stats.columns else {}
-        top_disciplinas_data = df_stats['top_disciplinas'].iloc[
-            0] if not df_stats.empty and 'top_disciplinas' in df_stats.columns else []
-        registros_por_semana_data = df_stats['registros_por_semana'].iloc[
-            0] if not df_stats.empty and 'registros_por_semana' in df_stats.columns else []
+        # Consulta 2: Top 5 Disciplinas
+        disciplinas_query = f"""
+            SELECT DISCIPLINA, COUNT(*) AS contagem
+            FROM `{PROJECT_ID}.{dataset_id}.relatorios_lrco`
+            WHERE DISCIPLINA IS NOT NULL
+            GROUP BY DISCIPLINA
+            ORDER BY contagem DESC
+            LIMIT 5
+        """
+        df_top_disciplinas = pandas_gbq.read_gbq(disciplinas_query, project_id=PROJECT_ID, credentials=creds)
 
-        # Converte para DataFrames do Pandas
-        df_top_disciplinas = pd.DataFrame(top_disciplinas_data if top_disciplinas_data else [])
-        df_registros_semana = pd.DataFrame(registros_por_semana_data if registros_por_semana_data else [])
+        # Consulta 3: Registros por semana
+        semana_query = f"""
+            SELECT SEMANA, COUNT(*) AS contagem
+            FROM `{PROJECT_ID}.{dataset_id}.relatorios_lrco`
+            WHERE SEMANA IS NOT NULL
+            GROUP BY SEMANA
+            ORDER BY SEMANA
+        """
+        df_registros_semana = pandas_gbq.read_gbq(semana_query, project_id=PROJECT_ID, credentials=creds)
         if not df_registros_semana.empty:
             df_registros_semana = df_registros_semana.set_index('SEMANA')
 
@@ -133,6 +118,7 @@ def get_dashboard_stats(creds, dataset_id):
             "top_disciplinas": df_top_disciplinas,
             "registros_por_semana": df_registros_semana
         }
+
     except Exception as e:
         st.warning(f"Não foi possível buscar as estatísticas. A tabela pode estar vazia ou ocorreu um erro: {e}")
         return {
