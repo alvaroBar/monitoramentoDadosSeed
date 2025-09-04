@@ -96,7 +96,7 @@ def autenticar_usuario():
                 </button>
             '''
             components.html(login_html, height=50)
-            st.stop()
+            # A remoção do st.stop() aqui é a correção crucial.
 
 
 # --- Funções de Interação com o BigQuery ---
