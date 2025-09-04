@@ -78,51 +78,51 @@ def autenticar_usuario():
 def get_dashboard_stats(creds, dataset_id):
     """
     Busca estatísticas agregadas do BigQuery para o dashboard.
-    Executa uma única consulta para otimizar a performance.
+    Executa uma única consulta otimizada para performance.
     """
+    # --- MUDANÇA CRÍTICA AQUI ---
+    # A consulta foi reescrita para ser mais eficiente e evitar o erro de subquery.
     sql_query = f"""
-    WITH Stats AS (
-        SELECT
-            COUNT(*) AS total_registros,
-            MAX(DATA_DO_RELATORIO) AS ultima_data,
-            COUNT(DISTINCT SEMANA) as total_semanas
-        FROM `{PROJECT_ID}.{dataset_id}.relatorios_lrco`
-    ),
-    TopDisciplinas AS (
-        SELECT
-            DISCIPLINA,
-            COUNT(*) AS contagem
-        FROM `{PROJECT_ID}.{dataset_id}.relatorios_lrco`
-        GROUP BY DISCIPLINA
-        ORDER BY contagem DESC
-        LIMIT 5
-    ),
-    RegistrosPorSemana AS (
-        SELECT
-            SEMANA,
-            COUNT(*) AS contagem
-        FROM `{PROJECT_ID}.{dataset_id}.relatorios_lrco`
-        GROUP BY SEMANA
-        ORDER BY SEMANA
-    )
     SELECT
-        (SELECT * FROM Stats) AS stats,
-        ARRAY_AGG(STRUCT(t.DISCIPLINA, t.contagem) ORDER BY t.contagem DESC) AS top_disciplinas,
-        ARRAY_AGG(STRUCT(r.SEMANA, r.contagem) ORDER BY r.SEMANA) AS registros_por_semana
-    FROM
-        TopDisciplinas t, RegistrosPorSemana r;
+      (
+        SELECT AS STRUCT
+          COUNT(*) AS total_registros,
+          MAX(DATA_DO_RELATORIO) AS ultima_data,
+          COUNT(DISTINCT SEMANA) as total_semanas
+        FROM `{PROJECT_ID}.{dataset_id}.relatorios_lrco`
+      ) AS stats,
+      (
+        SELECT ARRAY_AGG(STRUCT(DISCIPLINA, contagem) ORDER BY contagem DESC)
+        FROM (
+          SELECT DISCIPLINA, COUNT(*) AS contagem
+          FROM `{PROJECT_ID}.{dataset_id}.relatorios_lrco`
+          GROUP BY DISCIPLINA
+          ORDER BY contagem DESC
+          LIMIT 5
+        )
+      ) AS top_disciplinas,
+      (
+        SELECT ARRAY_AGG(STRUCT(SEMANA, contagem) ORDER BY SEMANA)
+        FROM (
+          SELECT SEMANA, COUNT(*) AS contagem
+          FROM `{PROJECT_ID}.{dataset_id}.relatorios_lrco`
+          GROUP BY SEMANA
+        )
+      ) AS registros_por_semana
     """
     try:
         df_stats = pandas_gbq.read_gbq(sql_query, project_id=PROJECT_ID, credentials=creds)
 
         # Extrai os dados do formato complexo do BigQuery
-        stats_data = df_stats['stats'][0] if not df_stats.empty else {}
-        top_disciplinas_data = df_stats['top_disciplinas'][0] if not df_stats.empty else []
-        registros_por_semana_data = df_stats['registros_por_semana'][0] if not df_stats.empty else []
+        stats_data = df_stats['stats'].iloc[0] if not df_stats.empty and 'stats' in df_stats.columns else {}
+        top_disciplinas_data = df_stats['top_disciplinas'].iloc[
+            0] if not df_stats.empty and 'top_disciplinas' in df_stats.columns else []
+        registros_por_semana_data = df_stats['registros_por_semana'].iloc[
+            0] if not df_stats.empty and 'registros_por_semana' in df_stats.columns else []
 
         # Converte para DataFrames do Pandas
-        df_top_disciplinas = pd.DataFrame(top_disciplinas_data)
-        df_registros_semana = pd.DataFrame(registros_por_semana_data)
+        df_top_disciplinas = pd.DataFrame(top_disciplinas_data if top_disciplinas_data else [])
+        df_registros_semana = pd.DataFrame(registros_por_semana_data if registros_por_semana_data else [])
         if not df_registros_semana.empty:
             df_registros_semana = df_registros_semana.set_index('SEMANA')
 
@@ -136,7 +136,7 @@ def get_dashboard_stats(creds, dataset_id):
     except Exception as e:
         st.warning(f"Não foi possível buscar as estatísticas. A tabela pode estar vazia ou ocorreu um erro: {e}")
         return {
-            "total_registros": 0, "ultima_data": "N/A", "total_semanas": 0,
+            "total_registros": 0, "ultima_data": None, "total_semanas": 0,
             "top_disciplinas": pd.DataFrame(columns=['DISCIPLINA', 'contagem']),
             "registros_por_semana": pd.DataFrame(columns=['contagem'])
         }
