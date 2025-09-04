@@ -44,18 +44,12 @@ def get_google_auth_flow():
 
 
 def autenticar_usuario():
-    """Gerencia o fluxo de login/logout do usuário com mensagens de depuração."""
-    st.info("Debug: Iniciando a função `autenticar_usuario`.")
-
+    """Gerencia o fluxo de login/logout do usuário."""
     flow = get_google_auth_flow()
     auth_code = st.query_params.get("code")
 
-    st.info(f"Debug: Código de autenticação na URL (auth_code): `{auth_code}`")
-
     if 'credentials' not in st.session_state:
-        st.info("Debug: 'credentials' não encontrado na sessão. Iniciando o fluxo de login.")
         if auth_code:
-            st.info("Debug: Código de autenticação encontrado. A tentar obter o token.")
             try:
                 flow.fetch_token(code=auth_code)
                 creds = flow.credentials
@@ -66,36 +60,40 @@ def autenticar_usuario():
 
                 st.session_state.user_info = user_info
                 st.query_params.clear()
-                st.info("Debug: Token obtido com sucesso. A reiniciar a aplicação.")
                 st.rerun()
             except Exception as e:
                 st.error(f"Erro ao obter o token de acesso: {e}")
                 st.stop()
         else:
-            st.info("Debug: Nenhum código de autenticação. A gerar a URL de login.")
             auth_url, _ = flow.authorization_url(prompt="select_account")
 
-            st.warning(
-                "Abaixo está a URL de login gerada para depuração. Se o botão não funcionar, tente copiar e colar esta URL no seu navegador.")
-            st.code(auth_url, language=None)
-
+            # --- CORREÇÃO APLICADA AQUI ---
+            # Usa um link <a> estilizado como um botão, que é mais fiável.
             st.markdown(
                 f'''
-                <a href="{auth_url}" target="_self" style="text-decoration: none;">
-                    <button style="width: 100%; padding: 0.6rem 1rem; background-color: #4CAF50; color: white; border: none; border-radius: 0.5rem; font-size: 1rem; cursor: pointer;">
-                        Login com Google
-                    </button>
+                <a href="{auth_url}" target="_self" style="
+                    display: inline-block;
+                    padding: 0.6rem 1rem;
+                    background-color: #4CAF50;
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 0.5rem;
+                    font-family: 'Source Sans Pro', sans-serif;
+                    font-size: 1rem;
+                    font-weight: 600;
+                    text-align: center;
+                    width: 100%;
+                    box-sizing: border-box;
+                ">
+                    Login com Google
                 </a>
                 ''',
                 unsafe_allow_html=True
             )
-            st.info("Debug: Botão de login exibido. A execução do script será interrompida aqui.")
             st.stop()
-    else:
-        st.info("Debug: 'credentials' encontrado na sessão. O usuário já está logado.")
 
 
-# --- Funções de Interação com o BigQuery (sem alterações) ---
+# --- Funções de Interação com o BigQuery ---
 
 def get_dashboard_stats(creds, dataset_id):
     """
