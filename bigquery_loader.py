@@ -5,6 +5,7 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google.cloud import bigquery
+import streamlit.components.v1 as components
 
 # --- Configurações de Autenticação (Lidas dos Segredos do Streamlit) ---
 try:
@@ -67,12 +68,34 @@ def autenticar_usuario():
         else:
             auth_url, _ = flow.authorization_url(prompt="select_account")
 
-            # --- CORREÇÃO APLICADA AQUI ---
-            # Usa o st.link_button, que é fiável, e melhora a experiência do usuário.
-            st.link_button("Login com Google", auth_url, use_container_width=True)
-            with st.spinner("Aguardando autenticação na nova aba... Esta página será atualizada automaticamente."):
-                st.info(
-                    "Uma nova aba foi aberta para o login com o Google. Após a autenticação, pode fechar a outra aba e voltar para esta.")
+            # --- NOVA ABORDAGEM: Botão HTML com JavaScript para redirecionamento na mesma aba ---
+            login_html = f'''
+                <script>
+                    function redirectToGoogle() {{
+                        // Redireciona a janela principal, saindo do iframe do Streamlit
+                        window.top.location.href = "{auth_url}";
+                    }}
+                </script>
+                <button 
+                    onclick="redirectToGoogle()" 
+                    style="
+                        width: 100%; 
+                        padding: 0.6rem 1rem; 
+                        background-color: #4CAF50; 
+                        color: white; 
+                        border: none; 
+                        border-radius: 0.5rem; 
+                        font-family: 'Source Sans Pro', sans-serif; 
+                        font-size: 1rem;
+                        font-weight: 600;
+                        cursor: pointer;
+                        transition: background-color 0.2s ease;
+                    "
+                >
+                    Login com Google
+                </button>
+            '''
+            components.html(login_html, height=50)
             st.stop()
 
 
