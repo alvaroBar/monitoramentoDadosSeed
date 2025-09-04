@@ -6,6 +6,7 @@ from google.oauth2.credentials import Credentials
 import os
 
 # --- Configurações de Autenticação (Lidas dos Segredos do Streamlit) ---
+# ... (bloco try/except inalterado)
 try:
     CLIENT_ID = st.secrets.google_oauth.client_id
     CLIENT_SECRET = st.secrets.google_oauth.client_secret
@@ -52,8 +53,9 @@ def autenticar_usuario():
             try:
                 flow.fetch_token(code=auth_code)
                 st.session_state.credentials = flow.credentials
+                # Usamos uma consulta dummy para obter as informações do usuário de forma segura
                 user_info = pd.read_gbq(
-                    "SELECT * FROM UNNEST(GENERATE_ARRAY(1))",  # Query dummy para obter info
+                    "SELECT 1",
                     project_id=PROJECT_ID,
                     credentials=st.session_state.credentials
                 )._query_results.client.get_user_info()
@@ -64,13 +66,15 @@ def autenticar_usuario():
                 st.error(f"Erro ao obter o token de acesso: {e}")
                 st.stop()
         else:
-            auth_url, _ = flow.authorization_url(prompt="consent")
+            # --- MUDANÇA CRÍTICA AQUI ---
+            # O prompt="select_account" força o Google a mostrar a tela de seleção de contas.
+            auth_url, _ = flow.authorization_url(prompt="select_account")
             st.link_button("Login com Google", auth_url, use_container_width=True)
             st.stop()
 
 
-# --- Funções de Interação com o BigQuery ---
-
+# --- Funções de Interação com o BigQuery (inalteradas) ---
+# ...
 def get_dashboard_stats(creds, dataset_id):
     """
     Busca estatísticas agregadas do BigQuery para o dashboard.
@@ -103,7 +107,7 @@ def get_dashboard_stats(creds, dataset_id):
     )
     SELECT
         (SELECT * FROM Stats) AS stats,
-        ARRAY_AGG(STRUCT(t.DISCIPLINA, t.contagem)) AS top_disciplinas,
+        ARRAY_AGG(STRUCT(t.DISCIPLINA, t.contagem) ORDER BY t.contagem DESC) AS top_disciplinas,
         ARRAY_AGG(STRUCT(r.SEMANA, r.contagem) ORDER BY r.SEMANA) AS registros_por_semana
     FROM
         TopDisciplinas t, RegistrosPorSemana r;
@@ -112,23 +116,24 @@ def get_dashboard_stats(creds, dataset_id):
         df_stats = pandas_gbq.read_gbq(sql_query, project_id=PROJECT_ID, credentials=creds)
 
         # Extrai os dados do formato complexo do BigQuery
-        stats_data = df_stats['stats'][0]
-        top_disciplinas_data = df_stats['top_disciplinas'][0]
-        registros_por_semana_data = df_stats['registros_por_semana'][0]
+        stats_data = df_stats['stats'][0] if not df_stats.empty else {}
+        top_disciplinas_data = df_stats['top_disciplinas'][0] if not df_stats.empty else []
+        registros_por_semana_data = df_stats['registros_por_semana'][0] if not df_stats.empty else []
 
         # Converte para DataFrames do Pandas
         df_top_disciplinas = pd.DataFrame(top_disciplinas_data)
-        df_registros_semana = pd.DataFrame(registros_por_semana_data).set_index('SEMANA')
+        df_registros_semana = pd.DataFrame(registros_por_semana_data)
+        if not df_registros_semana.empty:
+            df_registros_semana = df_registros_semana.set_index('SEMANA')
 
         return {
-            "total_registros": stats_data['total_registros'],
-            "ultima_data": stats_data['ultima_data'],
-            "total_semanas": stats_data['total_semanas'],
+            "total_registros": stats_data.get('total_registros', 0),
+            "ultima_data": stats_data.get('ultima_data'),
+            "total_semanas": stats_data.get('total_semanas', 0),
             "top_disciplinas": df_top_disciplinas,
             "registros_por_semana": df_registros_semana
         }
     except Exception as e:
-        # Retorna um dicionário vazio ou com valores padrão em caso de erro (ex: tabela vazia)
         st.warning(f"Não foi possível buscar as estatísticas. A tabela pode estar vazia ou ocorreu um erro: {e}")
         return {
             "total_registros": 0, "ultima_data": "N/A", "total_semanas": 0,
@@ -137,8 +142,6 @@ def get_dashboard_stats(creds, dataset_id):
         }
 
 
-# (As outras funções como get_latest_week, carregar_dados_no_bigquery, etc., continuam aqui inalteradas)
-# ...
 def get_latest_week(creds, dataset_id):
     """Busca o maior número da coluna 'SEMANA' no BigQuery."""
     sql_query = f"SELECT MAX(SEMANA) as max_semana FROM `{PROJECT_ID}.{dataset_id}.relatorios_lrco`"
