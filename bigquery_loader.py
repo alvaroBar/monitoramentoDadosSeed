@@ -67,16 +67,12 @@ def autenticar_usuario():
             auth_url, _ = flow.authorization_url(prompt="select_account")
 
             # --- MUDANÇA CRÍTICA AQUI ---
-            # Usamos um botão normal que, ao ser clicado, executa um redirecionamento
-            # de JavaScript na mesma aba, em vez de abrir uma nova.
-            if st.button("Login com Google", use_container_width=True):
-                # Esta linha injeta o JavaScript que redireciona a página atual.
-                st.html(f'<script>window.location.href = "{auth_url}";</script>')
-                # Interrompe a execução para permitir o redirecionamento.
-                st.stop()
+            # Voltamos a usar o st.link_button, que é o método mais fiável
+            # para garantir o redirecionamento. A experiência do usuário será
+            # a de clicar num botão que o leva para a página de login.
+            st.link_button("Login com Google", auth_url, use_container_width=True)
 
-            # Interrompe a execução para que o usuário veja apenas o botão de login,
-            # caso ele ainda não tenha sido clicado.
+            # Interrompe a execução para que o usuário veja apenas o botão de login.
             st.stop()
 
 
