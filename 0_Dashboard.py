@@ -28,7 +28,7 @@ try:
         st.stop()
 except (AttributeError, KeyError):
     st.error(
-        "ERRO DE CONFIGURAÇÃO: O mapeamento de NREs [office_mapping] não foi encontrado nos Segredos do Streamlit.")
+        "ERRO DE CONFIGURAÇÃO: O mapeamento de escritórios [office_mapping] não foi encontrado nos Segredos do Streamlit.")
     st.stop()
 
 with st.sidebar:
@@ -41,7 +41,7 @@ with st.sidebar:
 
 st.title("📊 Dashboard de Relatórios LRCO")
 st.markdown(
-    f"Bem-vindo(a)! Estes são os dados atuais para o seu NRE (Dataset: `{st.session_state.dataset_id}`).")
+    f"Bem-vindo(a)! Estes são os dados atuais para o seu escritório (Dataset: `{st.session_state.dataset_id}`).")
 
 # Busca os dados para o dashboard
 creds = st.session_state.credentials
@@ -87,4 +87,4 @@ if stats:
             st.info("Não há dados de disciplinas para exibir.")
 
 else:
-    st.info("Ainda não há dados lançados para este NRE.")
+    st.info("Ainda não há dados lançados para este escritório.")
