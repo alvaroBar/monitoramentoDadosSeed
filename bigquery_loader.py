@@ -45,12 +45,18 @@ def get_google_auth_flow():
 
 
 def autenticar_usuario():
-    """Gerencia o fluxo de login/logout do usuário."""
+    """Gerencia o fluxo de login/logout do usuário com mensagens de depuração."""
+    st.info("Debug: Iniciando a função `autenticar_usuario`.")
+
     flow = get_google_auth_flow()
     auth_code = st.query_params.get("code")
 
+    st.info(f"Debug: Código de autenticação na URL (auth_code): `{auth_code}`")
+
     if 'credentials' not in st.session_state:
+        st.info("Debug: 'credentials' não encontrado na sessão. Iniciando o fluxo de login.")
         if auth_code:
+            st.info("Debug: Código de autenticação encontrado. A tentar obter o token.")
             try:
                 flow.fetch_token(code=auth_code)
                 creds = flow.credentials
@@ -61,14 +67,19 @@ def autenticar_usuario():
 
                 st.session_state.user_info = user_info
                 st.query_params.clear()
+                st.info("Debug: Token obtido com sucesso. A reiniciar a aplicação.")
                 st.rerun()
             except Exception as e:
                 st.error(f"Erro ao obter o token de acesso: {e}")
                 st.stop()
         else:
+            st.info("Debug: Nenhum código de autenticação. A gerar a URL de login.")
             auth_url, _ = flow.authorization_url(prompt="select_account")
 
-            # --- NOVA ABORDAGEM: Botão HTML com JavaScript para redirecionamento na mesma aba ---
+            st.warning(
+                "Abaixo está a URL de login gerada para depuração. Se o botão não funcionar, tente copiar e colar esta URL no seu navegador.")
+            st.code(auth_url, language=None)
+
             login_html = f'''
                 <script>
                     function redirectToGoogle() {{
@@ -96,7 +107,10 @@ def autenticar_usuario():
                 </button>
             '''
             components.html(login_html, height=50)
-            # A remoção do st.stop() aqui é a correção crucial.
+            st.info("Debug: Botão de login exibido. A execução do script será interrompida aqui.")
+            st.stop()
+    else:
+        st.info("Debug: 'credentials' encontrado na sessão. O usuário já está logado.")
 
 
 # --- Funções de Interação com o BigQuery ---
