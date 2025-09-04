@@ -76,7 +76,7 @@ def autenticar_usuario():
                     <button style="
                         width: 100%; 
                         padding: 0.6rem 1rem; 
-                        background-color: #F63366; 
+                        background-color: #4CAF50; 
                         color: white; 
                         border: none; 
                         border-radius: 0.5rem; 
@@ -92,7 +92,7 @@ def autenticar_usuario():
                 ''',
                 unsafe_allow_html=True
             )
-            st.stop()
+            # A remoção do st.stop() aqui é a correção crucial.
 
 
 # --- Funções de Interação com o BigQuery (sem alterações) ---
