@@ -68,15 +68,13 @@ def autenticar_usuario():
         else:
             auth_url, _ = flow.authorization_url(prompt="select_account")
 
-            # --- NOVA ABORDAGEM: Botão do Streamlit que aciona um redirecionamento via JavaScript ---
-            if st.button("Login com Google", use_container_width=True):
-                # Injeta um script HTML que redireciona a janela principal do navegador
-                redirect_script = f"""
-                    <script type="text/javascript">
-                        window.top.location.href = "{auth_url}";
-                    </script>
-                """
-                components.html(redirect_script)
+            # --- SOLUÇÃO ROBUSTA: Usa o st.link_button e melhora a experiência do usuário ---
+            st.link_button("Login com Google", auth_url, use_container_width=True, type="primary")
+
+            # Exibe uma mensagem clara para guiar o usuário
+            st.info(
+                "ℹ️ Uma nova aba será aberta para o login com o Google. Após a autenticação, pode fechar a aba de login e voltar para esta, que será atualizada automaticamente.")
+            st.stop()
 
 
 # --- Funções de Interação com o BigQuery ---
