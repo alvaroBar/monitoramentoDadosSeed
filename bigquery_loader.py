@@ -61,6 +61,9 @@ def autenticar_usuario():
 
                 st.session_state.user_info = user_info
                 st.query_params.clear()
+
+                # 🔑 Redireciona de volta para a URL principal (sem deixar aba órfã)
+                st.experimental_set_query_params()  # limpa parâmetros da URL
                 st.rerun()
             except Exception as e:
                 st.error(f"Erro ao obter o token de acesso: {e}")
@@ -68,12 +71,15 @@ def autenticar_usuario():
         else:
             auth_url, _ = flow.authorization_url(prompt="select_account")
 
-            # --- SOLUÇÃO ROBUSTA: Usa o st.link_button e melhora a experiência do usuário ---
-            st.link_button("Login com Google", auth_url, use_container_width=True, type="primary")
+            # 🔥 Mude de link_button para markdown com target=_self
+            st.markdown(
+                f"<a href='{auth_url}' target='_self'><button style='width:100%;padding:10px;background:#4285F4;color:white;border:none;border-radius:5px;'>Login com Google</button></a>",
+                unsafe_allow_html=True
+            )
 
-            # Exibe uma mensagem clara para guiar o usuário
-            st.info("ℹ️ Uma nova aba será aberta para o login. Após a autenticação, esta aba pode ser fechada.")
+            st.info("ℹ️ Você será redirecionado para o Google e voltará automaticamente para esta página após autenticar.")
             st.stop()
+
 
 
 # --- Funções de Interação com o BigQuery ---
