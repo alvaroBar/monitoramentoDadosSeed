@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO PRINCIPAL: 1_Processar_Relatórios_PDF.py
-# Corrigido o bug de AttributeError para dataset_id.
+# Corrigida a lógica da barra de progresso para evitar congelamento da interface.
 # ==============================================================================
 
 import streamlit as st
@@ -44,11 +44,16 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, sta
     for i, arquivo_pdf in enumerate(lista_de_arquivos_pdf):
         progresso_atual = (i + 1) / total_arquivos
         tempo_decorrido = time.time() - tempo_inicio
-        tempo_medio_por_arquivo = tempo_decorrido / (i + 1)
-        arquivos_restantes = total_arquivos - (i + 1)
-        tempo_restante_estimado = tempo_medio_por_arquivo * arquivos_restantes
 
-        texto_progresso = f"Processando arquivo {i + 1} de {total_arquivos}... Tempo restante estimado: {formatar_tempo(tempo_restante_estimado)}"
+        # Evita a divisão por zero no primeiro arquivo
+        if i + 1 > 0:
+            tempo_medio_por_arquivo = tempo_decorrido / (i + 1)
+            arquivos_restantes = total_arquivos - (i + 1)
+            tempo_restante_estimado = tempo_medio_por_arquivo * arquivos_restantes
+            texto_progresso = f"Processando arquivo {i + 1} de {total_arquivos}... Tempo restante estimado: {formatar_tempo(tempo_restante_estimado)}"
+        else:
+            texto_progresso = f"Processando arquivo {i + 1} de {total_arquivos}..."
+
         progress_bar.progress(progresso_atual, text=texto_progresso)
         status_text.info(f"Lendo arquivo: `{arquivo_pdf.name}`")
 
@@ -107,6 +112,11 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, sta
                         registro_conteudo
                     ])
 
+        # --- CORREÇÃO APLICADA AQUI ---
+        # Adiciona uma pequena pausa para permitir que a interface do Streamlit se atualize.
+        # Isso evita que a barra de progresso "congele" durante o processamento intenso.
+        time.sleep(0.01)
+
     status_text.empty()
     progress_bar.empty()
 
@@ -121,7 +131,7 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, sta
 # --- Interface do Streamlit ---
 
 st.set_page_config(layout="wide")
-st.title("Conversor LRCO: PDF ➡️ BigQuery 📄➡️☁️")
+st.title("Processar Relatórios PDF 📄")
 
 autenticar_usuario()
 
@@ -134,7 +144,6 @@ user_info = st.session_state.user_info
 user_email = user_info.get("email")
 user_name = user_info.get("name", "Usuário")
 
-# --- CORREÇÃO: Mapeia o e-mail para o dataset_id em cada execução ---
 try:
     office_mapping = st.secrets.office_mapping
     if user_email in office_mapping:
@@ -143,8 +152,7 @@ try:
         st.error(f"ERRO: O e-mail '{user_email}' não está autorizado. Contate o administrador.")
         st.stop()
 except (AttributeError, KeyError):
-    st.error(
-        "ERRO DE CONFIGURAÇÃO: O mapeamento de escritórios [office_mapping] não foi encontrado nos Segredos do Streamlit.")
+    st.error("ERRO DE CONFIGURAÇÃO: O mapeamento [office_mapping] não foi encontrado nos Segredos do Streamlit.")
     st.stop()
 
 with st.sidebar:
