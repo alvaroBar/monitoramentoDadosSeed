@@ -72,7 +72,7 @@ def autenticar_usuario():
             st.link_button("Login com Google", auth_url, use_container_width=True)
             with st.spinner("Aguardando autenticação na nova aba... Esta página será atualizada automaticamente."):
                 st.info(
-                    "Uma nova aba foi aberta para o login com o Google. Após a autenticação, pode fechar a outra aba e voltar para esta.")
+                    "Uma nova aba foi aberta para o login com o Google. Após a autenticação, pode fechar esta.")
             st.stop()
 
 
