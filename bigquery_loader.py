@@ -5,7 +5,6 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google.cloud import bigquery
-import streamlit.components.v1 as components
 
 # --- Configurações de Autenticação (Lidas dos Segredos do Streamlit) ---
 try:
@@ -51,7 +50,6 @@ def autenticar_usuario():
 
     if 'credentials' not in st.session_state:
         if auth_code:
-            # --- Callback do Google ---
             try:
                 flow.fetch_token(code=auth_code)
                 creds = flow.credentials
@@ -61,36 +59,20 @@ def autenticar_usuario():
                 user_info = user_info_service.userinfo().get().execute()
 
                 st.session_state.user_info = user_info
-
-                # 🔑 Fecha a aba órfã e recarrega a principal
-                st.markdown("""
-                    <script>
-                        if (window.opener) {
-                            window.opener.location.reload();
-                            window.close();
-                        } else {
-                            window.location.href = "/";
-                        }
-                    </script>
-                    <p>Login realizado! Esta aba pode ser fechada.</p>
-                """, unsafe_allow_html=True)
-
-                st.stop()
+                st.query_params.clear()
+                st.rerun()
             except Exception as e:
                 st.error(f"Erro ao obter o token de acesso: {e}")
                 st.stop()
         else:
-            # --- Fluxo inicial: exibe botão para login ---
             auth_url, _ = flow.authorization_url(prompt="select_account")
 
-            st.link_button(
-                "🔑 Login com Google",
-                auth_url,
-                use_container_width=True,
-                type="primary"
-            )
-
-            st.info("ℹ️ O login abrirá em uma nova aba. Após autenticar, essa aba se fechará automaticamente e você voltará para esta.")
+            # --- CORREÇÃO APLICADA AQUI ---
+            # Usa o st.link_button, que é fiável, e melhora a experiência do usuário.
+            st.link_button("Login com Google", auth_url, use_container_width=True)
+            with st.spinner("Aguardando autenticação na nova aba... Esta página será atualizada automaticamente."):
+                st.info(
+                    "Uma nova aba foi aberta para o login com o Google. Após a autenticação, pode fechar a outra aba e voltar para esta.")
             st.stop()
 
 
@@ -249,4 +231,3 @@ def delete_week_data(creds, dataset_id, week_to_delete):
         return True, f"Registros da semana {week_to_delete} apagados com sucesso."
     except Exception as e:
         return False, f"Erro ao apagar os dados da semana: {e}"
-
