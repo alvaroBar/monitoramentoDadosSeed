@@ -1,7 +1,6 @@
 # ==============================================================================
-# ARQUIVO PRINCIPAL: 1_Processar_Relatórios_PDF.py
-# Adicionada funcionalidade para excluir turmas do envio,
-# com um campo de busca para facilitar a seleção.
+# ARQUIVO DA PÁGINA: 1_Processar_Relatórios_PDF.py
+# Adicionado "keep-alive" para a sessão do usuário.
 # ==============================================================================
 
 import streamlit as st
@@ -47,7 +46,6 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, sta
         progresso_atual = (i + 1) / total_arquivos
         tempo_decorrido = time.time() - tempo_inicio
 
-        # Evita a divisão por zero no primeiro arquivo
         if i + 1 > 0:
             tempo_medio_por_arquivo = tempo_decorrido / (i + 1)
             arquivos_restantes = total_arquivos - (i + 1)
@@ -114,7 +112,6 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, sta
                         registro_conteudo
                     ])
 
-        # Adiciona uma pequena pausa para permitir que a interface do Streamlit se atualize.
         time.sleep(0.01)
 
     status_text.empty()
@@ -221,7 +218,6 @@ elif st.session_state.etapa == "configurar_envio":
             min_value=1, value=semana_sugerida, step=1
         )
 
-    # --- ALTERAÇÃO APLICADA AQUI: Lógica de Exclusão de Turmas ---
     st.markdown("#### Filtrar Turmas para Exclusão")
     turmas_encontradas = sorted(df_processado['TURMA'].unique())
 
@@ -238,10 +234,9 @@ elif st.session_state.etapa == "configurar_envio":
     turmas_para_excluir = st.multiselect(
         "Selecione as turmas que deseja EXCLUIR do envio:",
         options=opcoes_filtradas,
-        default=[]  # Começa sem nenhuma turma selecionada para exclusão
+        default=[]
     )
 
-    # Filtra o DataFrame para MANTER as turmas que NÃO ESTÃO na lista de exclusão
     df_filtrado = df_processado[~df_processado['TURMA'].isin(turmas_para_excluir)]
     df_para_envio = df_filtrado.copy()
     df_para_envio['SEMANA'] = semana_para_envio
@@ -249,8 +244,22 @@ elif st.session_state.etapa == "configurar_envio":
     st.markdown("---")
 
     if not df_para_envio.empty:
-        st.write(f"**{len(df_para_envio)}** registros prontos para serem enviados. Pré-visualização:")
-        st.dataframe(df_para_envio.head())
+        st.write(f"**{len(df_para_envio)}** registros prontos para serem enviados.")
+
+        with st.expander("Clique para visualizar todos os dados a serem enviados"):
+            st.dataframe(df_para_envio)
+
+        csv_data = df_para_envio.to_csv(index=False).encode('utf-8')
+
+        st.download_button(
+            label="📥 Baixar dados selecionados como CSV",
+            data=csv_data,
+            file_name=f"dados_semana_{semana_para_envio}_para_envio.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+
+        st.markdown("---")
 
         if st.button("Enviar para o BigQuery", use_container_width=True):
             with st.spinner("Conectando e carregando dados..."):
@@ -273,4 +282,3 @@ elif st.session_state.etapa == "sucesso":
         st.session_state.etapa = "upload"
         st.session_state.df_processado = pd.DataFrame()
         st.rerun()
-
