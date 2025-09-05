@@ -5,6 +5,7 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google.cloud import bigquery
+import streamlit.components.v1 as components
 
 # --- Configurações de Autenticação (Lidas dos Segredos do Streamlit) ---
 try:
@@ -67,12 +68,11 @@ def autenticar_usuario():
         else:
             auth_url, _ = flow.authorization_url(prompt="select_account")
 
-            # --- CORREÇÃO APLICADA AQUI ---
-            # Usa o st.link_button, que é fiável, e melhora a experiência do usuário.
-            st.link_button("Login com Google", auth_url, use_container_width=True)
-            with st.spinner("Aguardando autenticação na nova aba... Esta página será atualizada automaticamente."):
-                st.info(
-                    "Uma nova aba foi aberta para o login com o Google. Após a autenticação, pode fechar esta.")
+            # --- SOLUÇÃO ROBUSTA: Usa o st.link_button e melhora a experiência do usuário ---
+            st.link_button("Login com Google", auth_url, use_container_width=True, type="primary")
+
+            # Exibe uma mensagem clara para guiar o usuário
+            st.info("ℹ️ Uma nova aba será aberta para o login. Após a autenticação, esta aba pode ser fechada.")
             st.stop()
 
 
@@ -218,16 +218,33 @@ def get_all_data_from_bq(creds, dataset_id, week_filter=None):
 
 
 def delete_week_data(creds, dataset_id, week_to_delete):
-    """Apaga todos os registros de uma semana específica no BigQuery."""
+    """
+    Apaga os registros de uma semana específica.
+    Como o modo gratuito do BigQuery não suporta DML (DELETE), a estratégia é:
+    1. Ler todos os dados da tabela, EXCETO a semana a ser apagada.
+    2. Sobrescrever a tabela inteira com os dados filtrados.
+    """
     try:
-        client = bigquery.Client(credentials=creds, project=PROJECT_ID)
-        table_ref = f"`{PROJECT_ID}.{dataset_id}.relatorios_lrco`"
+        # Passo 1: Selecionar todos os dados, exceto a semana a ser apagada
+        st.info(f"A ler os dados para manter (tudo exceto a semana {week_to_delete})...")
+        select_query = f"SELECT * FROM `{PROJECT_ID}.{dataset_id}.relatorios_lrco` WHERE SEMANA != {week_to_delete}"
 
-        delete_query = f"DELETE FROM {table_ref} WHERE SEMANA = {week_to_delete}"
+        df_to_keep = pandas_gbq.read_gbq(select_query, project_id=PROJECT_ID, credentials=creds)
 
-        query_job = client.query(delete_query)
-        query_job.result()
+        # Passo 2: Sobrescrever a tabela com os dados filtrados
+        st.info(f"A sobrescrever a tabela com {len(df_to_keep)} registros...")
+        destination_table = f"{dataset_id}.relatorios_lrco"
+
+        pandas_gbq.to_gbq(
+            df_to_keep,
+            destination_table=destination_table,
+            project_id=PROJECT_ID,
+            credentials=creds,
+            if_exists='replace',  # 'replace' apaga a tabela antiga e cria uma nova
+            progress_bar=True
+        )
 
         return True, f"Registros da semana {week_to_delete} apagados com sucesso."
+
     except Exception as e:
         return False, f"Erro ao apagar os dados da semana: {e}"
