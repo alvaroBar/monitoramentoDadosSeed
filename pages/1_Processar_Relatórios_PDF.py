@@ -9,6 +9,7 @@ import pdfplumber
 import pandas as pd
 import re
 import time
+from streamlit_autorefresh import st_autorefresh
 
 # Importa as funções necessárias do nosso módulo loader
 from bigquery_loader import autenticar_usuario, get_latest_week, carregar_dados_no_bigquery
@@ -159,6 +160,9 @@ with st.sidebar:
     if st.button("Logout"):
         st.session_state.clear()
         st.rerun()
+
+# --- ALTERAÇÃO APLICADA AQUI: Keep-alive da sessão ---
+st_autorefresh(interval=5 * 60 * 1000, key="session_refresher_processar")
 
 # --- Lógica de Estado para o fluxo da página ---
 if 'etapa' not in st.session_state:

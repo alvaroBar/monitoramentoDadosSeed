@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from bigquery_loader import autenticar_usuario, get_dashboard_stats
+from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(
     page_title="Dashboard de Relatórios",
@@ -36,6 +37,9 @@ with st.sidebar:
     if st.button("Logout"):
         st.session_state.clear()
         st.rerun()
+
+# --- ALTERAÇÃO APLICADA AQUI: Keep-alive da sessão ---
+st_autorefresh(interval=5 * 60 * 1000, key="session_refresher_processar")
 
 # --- Conteúdo do Dashboard ---
 

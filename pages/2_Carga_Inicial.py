@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from bigquery_loader import autenticar_usuario, carregar_dados_no_bigquery
+from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(layout="wide")
 st.title("Carga Inicial de Dados Históricos")
@@ -34,6 +35,9 @@ with st.sidebar:
     if st.button("Logout"):
         st.session_state.clear()
         st.rerun()
+
+# --- ALTERAÇÃO APLICADA AQUI: Keep-alive da sessão ---
+st_autorefresh(interval=5 * 60 * 1000, key="session_refresher_processar")
 
 st.warning(
     "Use esta página apenas uma vez ou quando precisar substituir todos os dados no banco de dados. Esta operação apagará os dados existentes antes de carregar os novos.")

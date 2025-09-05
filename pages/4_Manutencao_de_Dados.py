@@ -7,6 +7,8 @@ from bigquery_loader import (
     carregar_dados_no_bigquery
 )
 
+from streamlit_autorefresh import st_autorefresh
+
 # --- Lógica de Autenticação e Mapeamento ---
 autenticar_usuario()
 
@@ -39,6 +41,8 @@ with st.sidebar:
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.rerun()
+
+
 
 st.title("⚙️ Manutenção de Dados")
 st.warning("Atenção: As operações nesta página modificam permanentemente o banco de dados.")

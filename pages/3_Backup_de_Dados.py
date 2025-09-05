@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from bigquery_loader import autenticar_usuario, get_available_weeks, get_all_data_from_bq
+from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(layout="wide")
 st.title("Backup de Dados do BigQuery")
@@ -33,6 +34,9 @@ with st.sidebar:
     if st.button("Logout"):
         st.session_state.clear()
         st.rerun()
+
+# --- ALTERAÇÃO APLICADA AQUI: Keep-alive da sessão ---
+st_autorefresh(interval=5 * 60 * 1000, key="session_refresher_processar")
 
 # --- Lógica de Estado para o fluxo da página ---
 if 'backup_data' not in st.session_state:
