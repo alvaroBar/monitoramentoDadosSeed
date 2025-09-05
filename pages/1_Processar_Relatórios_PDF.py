@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO PRINCIPAL: 1_Processar_Relatórios_PDF.py
-# Adicionada funcionalidade para excluir disciplinas do envio,
+# Adicionada funcionalidade para excluir turmas do envio,
 # com um campo de busca para facilitar a seleção.
 # ==============================================================================
 
@@ -217,28 +217,28 @@ elif st.session_state.etapa == "configurar_envio":
             min_value=1, value=semana_sugerida, step=1
         )
 
-    # --- ALTERAÇÃO APLICADA AQUI: Lógica de Exclusão de Disciplinas ---
-    st.markdown("#### Filtrar Disciplinas para Exclusão")
-    disciplinas_encontradas = sorted(df_processado['DISCIPLINA'].unique())
+    # --- ALTERAÇÃO APLICADA AQUI: Lógica de Exclusão de Turmas ---
+    st.markdown("#### Filtrar Turmas para Exclusão")
+    turmas_encontradas = sorted(df_processado['TURMA'].unique())
 
-    filtro_texto = st.text_input(
-        "Digite para filtrar a lista de disciplinas a excluir:",
-        placeholder="Ex: ARTE"
+    filtro_texto_turma = st.text_input(
+        "Digite para filtrar a lista de turmas a excluir:",
+        placeholder="Ex: 8º Ano - Manhã"
     )
 
-    if filtro_texto:
-        opcoes_filtradas = [d for d in disciplinas_encontradas if filtro_texto.lower() in d.lower()]
+    if filtro_texto_turma:
+        opcoes_filtradas = [t for t in turmas_encontradas if filtro_texto_turma.lower() in t.lower()]
     else:
-        opcoes_filtradas = disciplinas_encontradas
+        opcoes_filtradas = turmas_encontradas
 
-    disciplinas_para_excluir = st.multiselect(
-        "Selecione as disciplinas que deseja EXCLUIR do envio:",
+    turmas_para_excluir = st.multiselect(
+        "Selecione as turmas que deseja EXCLUIR do envio:",
         options=opcoes_filtradas,
-        default=[]  # Começa sem nenhuma disciplina selecionada para exclusão
+        default=[]  # Começa sem nenhuma turma selecionada para exclusão
     )
 
-    # Filtra o DataFrame para MANTER as disciplinas que NÃO ESTÃO na lista de exclusão
-    df_filtrado = df_processado[~df_processado['DISCIPLINA'].isin(disciplinas_para_excluir)]
+    # Filtra o DataFrame para MANTER as turmas que NÃO ESTÃO na lista de exclusão
+    df_filtrado = df_processado[~df_processado['TURMA'].isin(turmas_para_excluir)]
     df_para_envio = df_filtrado.copy()
     df_para_envio['SEMANA'] = semana_para_envio
 
@@ -258,8 +258,7 @@ elif st.session_state.etapa == "configurar_envio":
                 else:
                     st.error("Falha no envio dos dados. Verifique a mensagem de erro acima.")
     else:
-        st.warning(
-            "Nenhuma disciplina foi selecionada ou todas as disciplinas foram excluídas. Nenhum dado será enviado.")
+        st.warning("Nenhuma turma foi selecionada ou todas as turmas foram excluídas. Nenhum dado será enviado.")
 
 # --- ETAPA 3: Sucesso e Recomeço ---
 elif st.session_state.etapa == "sucesso":
