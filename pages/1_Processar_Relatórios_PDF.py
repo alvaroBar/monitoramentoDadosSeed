@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO PRINCIPAL: 1_Processar_Relatórios_PDF.py
-# Corrigida a lógica da barra de progresso para evitar congelamento da interface.
+# Adicionada funcionalidade para filtrar registros por turma antes do envio.
 # ==============================================================================
 
 import streamlit as st
@@ -112,9 +112,7 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, sta
                         registro_conteudo
                     ])
 
-        # --- CORREÇÃO APLICADA AQUI ---
         # Adiciona uma pequena pausa para permitir que a interface do Streamlit se atualize.
-        # Isso evita que a barra de progresso "congele" durante o processamento intenso.
         time.sleep(0.01)
 
     status_text.empty()
@@ -218,14 +216,15 @@ elif st.session_state.etapa == "configurar_envio":
             min_value=1, value=semana_sugerida, step=1
         )
 
-    disciplinas_encontradas = sorted(df_processado['DISCIPLINA'].unique())
-    disciplinas_selecionadas = st.multiselect(
-        "Selecione as disciplinas que deseja enviar:",
-        options=disciplinas_encontradas,
-        default=disciplinas_encontradas
+    # --- ALTERAÇÃO APLICADA AQUI: Filtro por Turma ---
+    turmas_encontradas = sorted(df_processado['TURMA'].unique())
+    turmas_selecionadas = st.multiselect(
+        "Selecione as turmas que deseja enviar (todas estão marcadas por padrão):",
+        options=turmas_encontradas,
+        default=turmas_encontradas
     )
 
-    df_filtrado = df_processado[df_processado['DISCIPLINA'].isin(disciplinas_selecionadas)]
+    df_filtrado = df_processado[df_processado['TURMA'].isin(turmas_selecionadas)]
     df_para_envio = df_filtrado.copy()
     df_para_envio['SEMANA'] = semana_para_envio
 
@@ -245,7 +244,7 @@ elif st.session_state.etapa == "configurar_envio":
                 else:
                     st.error("Falha no envio dos dados. Verifique a mensagem de erro acima.")
     else:
-        st.warning("Nenhuma disciplina foi selecionada. Nenhum dado será enviado.")
+        st.warning("Nenhuma turma foi selecionada. Nenhum dado será enviado.")
 
 # --- ETAPA 3: Sucesso e Recomeço ---
 elif st.session_state.etapa == "sucesso":
@@ -256,3 +255,4 @@ elif st.session_state.etapa == "sucesso":
         st.session_state.etapa = "upload"
         st.session_state.df_processado = pd.DataFrame()
         st.rerun()
+
