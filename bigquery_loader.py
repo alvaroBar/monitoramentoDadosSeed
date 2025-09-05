@@ -51,6 +51,7 @@ def autenticar_usuario():
 
     if 'credentials' not in st.session_state:
         if auth_code:
+            # --- Callback do Google ---
             try:
                 flow.fetch_token(code=auth_code)
                 creds = flow.credentials
@@ -61,19 +62,37 @@ def autenticar_usuario():
 
                 st.session_state.user_info = user_info
 
-                # 🔑 Fecha a aba órfã e redireciona para a principal
+                # 🔑 Fecha a aba órfã e recarrega a principal
                 st.markdown("""
                     <script>
-                        window.opener.location.reload();
-                        window.close();
+                        if (window.opener) {
+                            window.opener.location.reload();
+                            window.close();
+                        } else {
+                            window.location.href = "/";
+                        }
                     </script>
-                    <p>Login realizado! Você pode fechar esta aba.</p>
+                    <p>Login realizado! Esta aba pode ser fechada.</p>
                 """, unsafe_allow_html=True)
 
                 st.stop()
             except Exception as e:
                 st.error(f"Erro ao obter o token de acesso: {e}")
                 st.stop()
+        else:
+            # --- Fluxo inicial: exibe botão para login ---
+            auth_url, _ = flow.authorization_url(prompt="select_account")
+
+            st.link_button(
+                "🔑 Login com Google",
+                auth_url,
+                use_container_width=True,
+                type="primary"
+            )
+
+            st.info("ℹ️ O login abrirá em uma nova aba. Após autenticar, essa aba se fechará automaticamente e você voltará para esta.")
+            st.stop()
+
 
 # --- Funções de Interação com o BigQuery ---
 
