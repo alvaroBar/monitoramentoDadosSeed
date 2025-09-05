@@ -1,6 +1,7 @@
 # ==============================================================================
 # ARQUIVO PRINCIPAL: 1_Processar_Relatórios_PDF.py
-# Adicionada funcionalidade para filtrar registros por turma antes do envio.
+# Adicionada funcionalidade para filtrar registros por turma antes do envio,
+# com um campo de busca para facilitar a seleção.
 # ==============================================================================
 
 import streamlit as st
@@ -216,12 +217,27 @@ elif st.session_state.etapa == "configurar_envio":
             min_value=1, value=semana_sugerida, step=1
         )
 
-    # --- ALTERAÇÃO APLICADA AQUI: Filtro por Turma ---
+    # --- ALTERAÇÃO APLICADA AQUI: Filtro por Turma com campo de busca ---
+    st.markdown("#### Filtrar Turmas")
     turmas_encontradas = sorted(df_processado['TURMA'].unique())
+
+    # Campo de texto para o usuário digitar o filtro
+    filtro_texto_turma = st.text_input(
+        "Digite para filtrar a lista de turmas abaixo:",
+        placeholder="Ex: 8º Ano - Manhã"
+    )
+
+    # Filtra a lista de turmas com base no texto digitado
+    if filtro_texto_turma:
+        opcoes_turmas_filtradas = [t for t in turmas_encontradas if filtro_texto_turma.lower() in t.lower()]
+    else:
+        opcoes_turmas_filtradas = turmas_encontradas
+
+    # O multiselect agora usa a lista filtrada
     turmas_selecionadas = st.multiselect(
-        "Selecione as turmas que deseja enviar (todas estão marcadas por padrão):",
-        options=turmas_encontradas,
-        default=turmas_encontradas
+        "Selecione as turmas que deseja enviar (todas as turmas filtradas estão marcadas por padrão):",
+        options=opcoes_turmas_filtradas,
+        default=opcoes_turmas_filtradas
     )
 
     df_filtrado = df_processado[df_processado['TURMA'].isin(turmas_selecionadas)]
