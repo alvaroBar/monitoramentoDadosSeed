@@ -5,6 +5,7 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google.cloud import bigquery
+import streamlit.components.v1 as components
 
 # --- Configurações de Autenticação (Lidas dos Segredos do Streamlit) ---
 try:
@@ -67,12 +68,8 @@ def autenticar_usuario():
         else:
             auth_url, _ = flow.authorization_url(prompt="select_account")
 
-            # --- CORREÇÃO APLICADA AQUI ---
-            # Usa o st.link_button, que é fiável, e melhora a experiência do usuário.
-            st.link_button("Login com Google", auth_url, use_container_width=True)
-            with st.spinner("Aguardando autenticação na nova aba... Esta página será atualizada automaticamente."):
-                st.info(
-                    "Uma nova aba foi aberta para o login com o Google. Após a autenticação, pode fechar esta.")
+            st.link_button("Login com Google", auth_url, use_container_width=True, type="primary")
+            st.info("ℹ️ Uma nova aba será aberta para o login. Após a autenticação, esta aba pode ser fechada.")
             st.stop()
 
 
@@ -84,7 +81,6 @@ def get_dashboard_stats(creds, dataset_id):
     Usa consultas separadas para maior robustez.
     """
     try:
-        # Consulta 1: Estatísticas gerais
         stats_query = f"""
             SELECT
                 COUNT(*) AS total_registros,
@@ -95,7 +91,6 @@ def get_dashboard_stats(creds, dataset_id):
         df_stats = pandas_gbq.read_gbq(stats_query, project_id=PROJECT_ID, credentials=creds)
         stats_data = df_stats.to_dict('records')[0] if not df_stats.empty else {}
 
-        # Consulta 2: Top 5 Disciplinas
         disciplinas_query = f"""
             SELECT DISCIPLINA, COUNT(*) AS contagem
             FROM `{PROJECT_ID}.{dataset_id}.relatorios_lrco`
@@ -106,7 +101,6 @@ def get_dashboard_stats(creds, dataset_id):
         """
         df_top_disciplinas = pandas_gbq.read_gbq(disciplinas_query, project_id=PROJECT_ID, credentials=creds)
 
-        # Consulta 3: Registros por semana
         semana_query = f"""
             SELECT SEMANA, COUNT(*) AS contagem
             FROM `{PROJECT_ID}.{dataset_id}.relatorios_lrco`
@@ -169,10 +163,8 @@ def preparar_dataframe_para_bigquery(df: pd.DataFrame) -> pd.DataFrame:
     """Prepara o DataFrame para ser carregado no BigQuery."""
     df_copy = df.copy()
 
-    # Validação da coluna SEMANA
     df_copy['SEMANA'] = pd.to_numeric(df_copy['SEMANA'], errors='coerce').fillna(0).astype(int)
 
-    # Limpeza de colunas de texto
     for col in df_copy.select_dtypes(include=['object']).columns:
         if col != 'SEMANA':
             df_copy[col] = df_copy[col].str.strip().str.replace('\r', ' ', regex=False).str.replace('\n', ' ',
@@ -180,7 +172,6 @@ def preparar_dataframe_para_bigquery(df: pd.DataFrame) -> pd.DataFrame:
 
     df_copy.replace("Sem registro", None, inplace=True)
 
-    # Conversão de tipos de dados
     df_copy["DATA_DO_RELATORIO"] = pd.to_datetime(df_copy["DATA_DO_RELATORIO"], format='%d/%m/%Y',
                                                   errors='coerce').dt.date
     df_copy["REGISTRO_DE_AULA"] = pd.to_datetime(df_copy["REGISTRO_DE_AULA"], format='%d/%m/%Y %H:%M:%S',
@@ -218,7 +209,10 @@ def get_all_data_from_bq(creds, dataset_id, week_filter=None):
 
 
 def delete_week_data(creds, dataset_id, week_to_delete):
-    """Apaga todos os registros de uma semana específica no BigQuery."""
+    """
+    Apaga os registros de uma semana específica usando o comando DELETE.
+    Esta função só funcionará se o faturamento estiver ativado no projeto do GCP.
+    """
     try:
         client = bigquery.Client(credentials=creds, project=PROJECT_ID)
         table_ref = f"`{PROJECT_ID}.{dataset_id}.relatorios_lrco`"
@@ -229,5 +223,50 @@ def delete_week_data(creds, dataset_id, week_to_delete):
         query_job.result()
 
         return True, f"Registros da semana {week_to_delete} apagados com sucesso."
+
     except Exception as e:
+        error_message = str(e)
+        if "DML statements are not supported in the free tier" in error_message or "billing account" in error_message:
+            return False, "Erro: A sua conta do BigQuery não suporta a exclusão de dados. Por favor, ative o faturamento no seu projeto do Google Cloud para habilitar esta funcionalidade."
+
         return False, f"Erro ao apagar os dados da semana: {e}"
+
+
+# --- NOVA FUNÇÃO PARA CONSULTA DINÂMICA ---
+def query_data_from_bq(creds, dataset_id, filters):
+    """
+    Busca dados do BigQuery com base em um dicionário de filtros dinâmicos.
+    """
+    table_ref = f"`{PROJECT_ID}.{dataset_id}.relatorios_lrco`"
+    sql_query = f"SELECT * FROM {table_ref}"
+    where_clauses = []
+
+    # Constrói a cláusula WHERE dinamicamente
+    if filters.get("semana"):
+        where_clauses.append(f"SEMANA = {int(filters['semana'])}")
+    if filters.get("municipio"):
+        # Usa UPPER para tornar a busca insensível a maiúsculas/minúsculas
+        where_clauses.append(f"UPPER(MUNICIPIO) LIKE '%{filters['municipio'].upper()}%'")
+    if filters.get("escola"):
+        where_clauses.append(f"UPPER(ESCOLA) LIKE '%{filters['escola'].upper()}%'")
+    if filters.get("turma"):
+        where_clauses.append(f"UPPER(TURMA) LIKE '%{filters['turma'].upper()}%'")
+    if filters.get("disciplina"):
+        where_clauses.append(f"UPPER(DISCIPLINA) LIKE '%{filters['disciplina'].upper()}%'")
+    if filters.get("data_inicio") and filters.get("data_fim"):
+        # Formata as datas para o padrão 'YYYY-MM-DD' que o BigQuery entende
+        data_inicio_str = filters['data_inicio'].strftime('%Y-%m-%d')
+        data_fim_str = filters['data_fim'].strftime('%Y-%m-%d')
+        where_clauses.append(f"DATA_DO_RELATORIO BETWEEN '{data_inicio_str}' AND '{data_fim_str}'")
+
+    if where_clauses:
+        sql_query += " WHERE " + " AND ".join(where_clauses)
+
+    sql_query += " ORDER BY DATA_DO_RELATORIO DESC, HORARIO LIMIT 1000"  # Limita a 1000 resultados para evitar sobrecarga
+
+    try:
+        df = pandas_gbq.read_gbq(sql_query, project_id=PROJECT_ID, credentials=creds)
+        return df
+    except Exception as e:
+        st.error(f"Erro ao executar a consulta no BigQuery: {e}")
+        return pd.DataFrame()
