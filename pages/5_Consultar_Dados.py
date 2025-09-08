@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: 5_Consultar_Dados.py
-# Corrigida a formatação de data usando st.column_config para o padrão DD/MM/YYYY.
+# Corrigida a formatação de data para o padrão DD/MM/YYYY usando conversão manual.
 # ==============================================================================
 
 import streamlit as st
@@ -134,27 +134,23 @@ if 'search_results' in st.session_state and st.session_state.get('submitted_form
             use_container_width=True
         )
 
-        # --- ALTERAÇÃO APLICADA AQUI: Usa st.column_config para formatação ---
-        # A formatação agora é aplicada diretamente no componente de exibição,
-        # o que é mais robusto e a forma recomendada pelo Streamlit.
-        st.dataframe(
-            df_results,
-            column_config={
-                "DATA_DO_RELATORIO": st.column_config.DateColumn(
-                    "Data do Relatório",
-                    format="DD/MM/YYYY",
-                ),
-                "REGISTRO_DE_AULA": st.column_config.DatetimeColumn(
-                    "Registo da Aula",
-                    format="DD/MM/YYYY HH:mm:ss",
-                ),
-                "REGISTRO_DE_CONTEUDO": st.column_config.DatetimeColumn(
-                    "Registo do Conteúdo",
-                    format="DD/MM/YYYY HH:mm:ss",
-                ),
-            },
-            use_container_width=True
-        )
+        # --- ALTERAÇÃO APLICADA AQUI: Formatação Manual Forçada ---
+        # Cria uma cópia do DataFrame para formatar a exibição sem alterar os dados originais.
+        df_display = df_results.copy()
+
+        # Converte as colunas de data/datetime para o formato desejado como strings, tratando valores nulos.
+        if 'DATA_DO_RELATORIO' in df_display.columns:
+            df_display['DATA_DO_RELATORIO'] = pd.to_datetime(df_display['DATA_DO_RELATORIO']).dt.strftime(
+                '%d/%m/%Y').where(df_display['DATA_DO_RELATORIO'].notna())
+        if 'REGISTRO_DE_AULA' in df_display.columns:
+            df_display['REGISTRO_DE_AULA'] = pd.to_datetime(df_display['REGISTRO_DE_AULA']).dt.strftime(
+                '%d/%m/%Y %H:%M:%S').where(df_display['REGISTRO_DE_AULA'].notna())
+        if 'REGISTRO_DE_CONTEUDO' in df_display.columns:
+            df_display['REGISTRO_DE_CONTEUDO'] = pd.to_datetime(df_display['REGISTRO_DE_CONTEUDO']).dt.strftime(
+                '%d/%m/%Y %H:%M:%S').where(df_display['REGISTRO_DE_CONTEUDO'].notna())
+
+        st.dataframe(df_display, use_container_width=True)
+
     else:
         st.info("Nenhum registro encontrado com os filtros selecionados.")
 
