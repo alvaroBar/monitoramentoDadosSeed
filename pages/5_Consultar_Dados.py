@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: 5_Consultar_Dados.py
-# Adicionada formatação de data para exibição no padrão DD/MM/YYYY.
+# Corrigida a formatação de data usando st.column_config para o padrão DD/MM/YYYY.
 # ==============================================================================
 
 import streamlit as st
@@ -87,7 +87,6 @@ if submitted:
     data_inicio_selecionada = filtro_data[0] if filtro_data and len(filtro_data) == 2 else None
     data_fim_selecionada = filtro_data[1] if filtro_data and len(filtro_data) == 2 else None
 
-    # --- LÓGICA DE VALIDAÇÃO DE DATA ---
     data_valida = True
     if data_inicio_selecionada and data_fim_selecionada:
         if data_inicio_selecionada < min_date_banco or data_fim_selecionada > max_date_banco:
@@ -113,7 +112,6 @@ if submitted:
         else:
             with st.spinner("A buscar dados no BigQuery..."):
                 st.session_state.search_results = query_data_from_bq(creds, dataset_id, filters)
-                # Limpa o estado 'submitted' para evitar re-execução automática
                 st.session_state.submitted_form = True
 
 # --- Exibição dos Resultados ---
@@ -126,7 +124,7 @@ if 'search_results' in st.session_state and st.session_state.get('submitted_form
     if not df_results.empty:
         st.success(f"{len(df_results)} registros encontrados (limitado aos 1000 resultados mais recentes).")
 
-        # Mantém o dataframe original para o download do CSV
+        # Mantém o dataframe original com os tipos de dados corretos para o download do CSV
         csv_data = df_results.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Baixar resultados como CSV",
@@ -136,21 +134,27 @@ if 'search_results' in st.session_state and st.session_state.get('submitted_form
             use_container_width=True
         )
 
-        # --- ALTERAÇÃO APLICADA AQUI: Formatação de datas para exibição ---
-        # Cria uma cópia do DataFrame para formatar a exibição sem alterar os dados originais
-        df_display = df_results.copy()
-
-        # Garante que as colunas de data/datetime existem antes de tentar formatá-las
-        if 'DATA_DO_RELATORIO' in df_display.columns:
-            df_display['DATA_DO_RELATORIO'] = pd.to_datetime(df_display['DATA_DO_RELATORIO']).dt.strftime('%d/%m/%Y')
-        if 'REGISTRO_DE_AULA' in df_display.columns:
-            df_display['REGISTRO_DE_AULA'] = pd.to_datetime(df_display['REGISTRO_DE_AULA']).dt.strftime(
-                '%d/%m/%Y %H:%M:%S').where(df_display['REGISTRO_DE_AULA'].notna())
-        if 'REGISTRO_DE_CONTEUDO' in df_display.columns:
-            df_display['REGISTRO_DE_CONTEUDO'] = pd.to_datetime(df_display['REGISTRO_DE_CONTEUDO']).dt.strftime(
-                '%d/%m/%Y %H:%M:%S').where(df_display['REGISTRO_DE_CONTEUDO'].notna())
-
-        st.dataframe(df_display)
+        # --- ALTERAÇÃO APLICADA AQUI: Usa st.column_config para formatação ---
+        # A formatação agora é aplicada diretamente no componente de exibição,
+        # o que é mais robusto e a forma recomendada pelo Streamlit.
+        st.dataframe(
+            df_results,
+            column_config={
+                "DATA_DO_RELATORIO": st.column_config.DateColumn(
+                    "Data do Relatório",
+                    format="DD/MM/YYYY",
+                ),
+                "REGISTRO_DE_AULA": st.column_config.DatetimeColumn(
+                    "Registo da Aula",
+                    format="DD/MM/YYYY HH:mm:ss",
+                ),
+                "REGISTRO_DE_CONTEUDO": st.column_config.DatetimeColumn(
+                    "Registo do Conteúdo",
+                    format="DD/MM/YYYY HH:mm:ss",
+                ),
+            },
+            use_container_width=True
+        )
     else:
         st.info("Nenhum registro encontrado com os filtros selecionados.")
 
