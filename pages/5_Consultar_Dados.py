@@ -87,10 +87,9 @@ if submitted:
     data_inicio_selecionada = filtro_data[0] if filtro_data and len(filtro_data) == 2 else None
     data_fim_selecionada = filtro_data[1] if filtro_data and len(filtro_data) == 2 else None
 
-    # --- NOVA LÓGICA DE VALIDAÇÃO DE DATA ---
+    # --- LÓGICA DE VALIDAÇÃO DE DATA ---
     data_valida = True
     if data_inicio_selecionada and data_fim_selecionada:
-        # Compara a seleção do usuário com os limites do banco de dados
         if data_inicio_selecionada < min_date_banco or data_fim_selecionada > max_date_banco:
             st.error(
                 f"Intervalo de data inválido. Por favor, selecione datas entre {min_date_banco.strftime('%d/%m/%Y')} e {max_date_banco.strftime('%d/%m/%Y')}.")
@@ -114,9 +113,11 @@ if submitted:
         else:
             with st.spinner("A buscar dados no BigQuery..."):
                 st.session_state.search_results = query_data_from_bq(creds, dataset_id, filters)
+                # Limpa o estado 'submitted' para evitar re-execução automática
+                st.session_state.submitted_form = True
 
 # --- Exibição dos Resultados ---
-if 'search_results' in st.session_state and submitted:
+if 'search_results' in st.session_state and st.session_state.get('submitted_form'):
     st.markdown("---")
     st.header("Resultados da Busca")
 
@@ -143,7 +144,6 @@ if 'search_results' in st.session_state and submitted:
         if 'DATA_DO_RELATORIO' in df_display.columns:
             df_display['DATA_DO_RELATORIO'] = pd.to_datetime(df_display['DATA_DO_RELATORIO']).dt.strftime('%d/%m/%Y')
         if 'REGISTRO_DE_AULA' in df_display.columns:
-            # Converte para datetime e aplica o formato, mantendo os nulos (NaT) como nulos
             df_display['REGISTRO_DE_AULA'] = pd.to_datetime(df_display['REGISTRO_DE_AULA']).dt.strftime(
                 '%d/%m/%Y %H:%M:%S').where(df_display['REGISTRO_DE_AULA'].notna())
         if 'REGISTRO_DE_CONTEUDO' in df_display.columns:
