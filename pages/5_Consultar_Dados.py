@@ -1,17 +1,18 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: 5_Consultar_Dados.py
-# Corrigido o valor padrão do seletor de datas para evitar erro de inicialização.
+# Interface de consulta aprimorada com seletores de múltipla escolha pré-carregados.
 # ==============================================================================
 
 import streamlit as st
 import pandas as pd
 from streamlit_autorefresh import st_autorefresh
+import datetime
 
 # Importa as funções necessárias do nosso módulo loader
-from bigquery_loader import autenticar_usuario, query_data_from_bq
+from bigquery_loader import autenticar_usuario, get_filter_options, query_data_from_bq
 
 st.set_page_config(layout="wide")
-st.title("Consulta de Dados 🔎")
+st.title("Consulta Avançada de Dados 🔎")
 
 autenticar_usuario()
 
@@ -45,51 +46,66 @@ with st.sidebar:
 # --- Keep-alive da sessão ---
 st_autorefresh(interval=5 * 60 * 1000, key="session_refresher_consulta")
 
+# --- Carrega as opções para os filtros ---
+creds = st.session_state.credentials
+dataset_id = st.session_state.dataset_id
+
+with st.spinner("A carregar opções de filtro do banco de dados..."):
+    opcoes_filtro = get_filter_options(creds, dataset_id)
+
 # --- Interface de Filtros ---
 st.header("Filtros de Busca")
+st.info("Preencha um ou mais campos abaixo para buscar os registros. Deixe em branco para ignorar um filtro.")
 
 with st.form(key="search_form"):
     col1, col2, col3 = st.columns(3)
+
     with col1:
-        filtro_semana = st.number_input("Filtrar por Semana (0 para ignorar)", min_value=0, step=1, value=0)
-        filtro_municipio = st.text_input("Filtrar por Município")
+        filtro_semanas = st.multiselect("Semanas", options=opcoes_filtro.get("semanas", []))
+        filtro_municipios = st.multiselect("Municípios", options=opcoes_filtro.get("municipios", []))
 
     with col2:
-        filtro_escola = st.text_input("Filtrar por Escola")
-        filtro_turma = st.text_input("Filtrar por Turma")
+        filtro_disciplinas = st.multiselect("Disciplinas", options=opcoes_filtro.get("disciplinas", []))
+        filtro_turmas = st.multiselect("Turmas", options=opcoes_filtro.get("turmas", []))
 
     with col3:
-        filtro_disciplina = st.text_input("Filtrar por Disciplina")
-        # --- CORREÇÃO APLICADA AQUI ---
-        # O valor padrão para um seletor de intervalo de datas vazio deve ser uma lista vazia.
-        filtro_data = st.date_input("Filtrar por Data do Relatório", value=[])
+        filtro_escola = st.text_input("Filtrar por nome da Escola (contém)")
 
-    submitted = st.form_submit_button("Buscar no Banco de Dados")
+        # Converte as datas min/max para o formato correto, se existirem
+        min_date = pd.to_datetime(opcoes_filtro.get("min_data")).to_pydatetime() if opcoes_filtro.get(
+            "min_data") else datetime.date(2020, 1, 1)
+        max_date = pd.to_datetime(opcoes_filtro.get("max_data")).to_pydatetime() if opcoes_filtro.get(
+            "max_data") else datetime.date.today()
+
+        filtro_data = st.date_input(
+            "Intervalo de Data do Relatório",
+            value=[],
+            min_value=min_date,
+            max_value=max_date
+        )
+
+    submitted = st.form_submit_button("Buscar no Banco de Dados", use_container_width=True, type="primary")
 
 if submitted:
     # Coleta os filtros do formulário
     filters = {
-        "semana": filtro_semana if filtro_semana > 0 else None,
-        "municipio": filtro_municipio,
+        "semanas": filtro_semanas,
+        "municipios": filtro_municipios,
+        "disciplinas": filtro_disciplinas,
+        "turmas": filtro_turmas,
         "escola": filtro_escola,
-        "turma": filtro_turma,
-        "disciplina": filtro_disciplina,
-        # A lógica de verificação agora lida corretamente com a lista vazia
         "data_inicio": filtro_data[0] if filtro_data and len(filtro_data) == 2 else None,
         "data_fim": filtro_data[1] if filtro_data and len(filtro_data) == 2 else None,
     }
 
-    # Remove filtros vazios para não serem usados na consulta
-    filters = {k: v for k, v in filters.items() if v is not None and v != ""}
+    # Remove filtros vazios (listas vazias ou strings vazias)
+    filters = {k: v for k, v in filters.items() if v}
 
     if not filters:
-        st.warning("Por favor, preencha pelo menos um filtro para iniciar a busca.")
+        st.warning("Por favor, selecione pelo menos um filtro para iniciar a busca.")
     else:
         with st.spinner("A buscar dados no BigQuery..."):
-            creds = st.session_state.credentials
-            dataset_id = st.session_state.dataset_id
-
-            # Chama a nova função de busca e armazena os resultados na sessão
+            # Armazena os resultados na sessão para persistirem
             st.session_state.search_results = query_data_from_bq(creds, dataset_id, filters)
 
 # --- Exibição dos Resultados ---
@@ -100,7 +116,7 @@ if 'search_results' in st.session_state:
     df_results = st.session_state.search_results
 
     if not df_results.empty:
-        st.success(f"{len(df_results)} registros encontrados (limitado a 1000 resultados).")
+        st.success(f"{len(df_results)} registros encontrados (limitado aos 1000 resultados mais recentes).")
 
         # Oferece o download dos resultados
         csv_data = df_results.to_csv(index=False).encode('utf-8')

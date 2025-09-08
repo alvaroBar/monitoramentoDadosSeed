@@ -5,7 +5,6 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google.cloud import bigquery
-import streamlit.components.v1 as components
 
 # --- Configurações de Autenticação (Lidas dos Segredos do Streamlit) ---
 try:
@@ -232,29 +231,71 @@ def delete_week_data(creds, dataset_id, week_to_delete):
         return False, f"Erro ao apagar os dados da semana: {e}"
 
 
-# --- NOVA FUNÇÃO PARA CONSULTA DINÂMICA ---
+@st.cache_data(ttl=3600)
+def get_filter_options(_creds, dataset_id):
+    """Busca todos os valores únicos para os filtros da página de consulta de uma só vez."""
+    table_ref = f"`{PROJECT_ID}.{dataset_id}.relatorios_lrco`"
+
+    query = f"""
+    SELECT
+      (SELECT ARRAY_AGG(DISTINCT SEMANA IGNORE NULLS ORDER BY SEMANA) FROM {table_ref}) AS semanas,
+      (SELECT ARRAY_AGG(DISTINCT MUNICIPIO IGNORE NULLS ORDER BY MUNICIPIO) FROM {table_ref}) AS municipios,
+      (SELECT ARRAY_AGG(DISTINCT DISCIPLINA IGNORE NULLS ORDER BY DISCIPLINA) FROM {table_ref}) AS disciplinas,
+      (SELECT ARRAY_AGG(DISTINCT TURMA IGNORE NULLS ORDER BY TURMA) FROM {table_ref}) AS turmas,
+      (SELECT MIN(DATA_DO_RELATORIO) FROM {table_ref}) as min_data,
+      (SELECT MAX(DATA_DO_RELATORIO) FROM {table_ref}) as max_data
+    """
+    try:
+        df = pandas_gbq.read_gbq(query, project_id=PROJECT_ID, credentials=_creds)
+        if not df.empty:
+            return df.to_dict('records')[0]
+    except Exception as e:
+        st.error(f"Erro ao buscar opções de filtro: {e}")
+
+    return {"semanas": [], "municipios": [], "disciplinas": [], "turmas": [], "min_data": None, "max_data": None}
+
+
+# --- ALTERAÇÃO APLICADA AQUI: Função de apoio refatorada ---
+def _format_sql_in_clause(values):
+    """
+    Formata uma lista de valores para uma cláusula IN, tratando aspas
+    de forma segura e Pythónica.
+    """
+    if not values:
+        return "('')"  # Retorna uma tupla vazia para evitar erro de sintaxe SQL
+
+    # Escapa aspas simples (' -> '') e envolve cada valor em aspas simples
+    formatted_values = [f"'{str(v).replace("'", "''")}'" for v in values]
+    return f"({', '.join(formatted_values)})"
+
+
 def query_data_from_bq(creds, dataset_id, filters):
     """
-    Busca dados do BigQuery com base em um dicionário de filtros dinâmicos.
+    Busca dados do BigQuery com base em um dicionário de filtros dinâmicos,
+    aceitando listas para os seletores de múltipla escolha.
     """
     table_ref = f"`{PROJECT_ID}.{dataset_id}.relatorios_lrco`"
     sql_query = f"SELECT * FROM {table_ref}"
     where_clauses = []
 
-    # Constrói a cláusula WHERE dinamicamente
-    if filters.get("semana"):
-        where_clauses.append(f"SEMANA = {int(filters['semana'])}")
-    if filters.get("municipio"):
-        # Usa UPPER para tornar a busca insensível a maiúsculas/minúsculas
-        where_clauses.append(f"UPPER(MUNICIPIO) LIKE '%{filters['municipio'].upper()}%'")
+    # Constrói a cláusula WHERE dinamicamente usando a nova função de apoio
+    if filters.get("semanas"):
+        semanas_str = ','.join(map(str, filters['semanas']))
+        where_clauses.append(f"SEMANA IN ({semanas_str})")
+
+    if filters.get("municipios"):
+        where_clauses.append(f"MUNICIPIO IN {_format_sql_in_clause(filters['municipios'])}")
+
     if filters.get("escola"):
         where_clauses.append(f"UPPER(ESCOLA) LIKE '%{filters['escola'].upper()}%'")
-    if filters.get("turma"):
-        where_clauses.append(f"UPPER(TURMA) LIKE '%{filters['turma'].upper()}%'")
-    if filters.get("disciplina"):
-        where_clauses.append(f"UPPER(DISCIPLINA) LIKE '%{filters['disciplina'].upper()}%'")
+
+    if filters.get("turmas"):
+        where_clauses.append(f"TURMA IN {_format_sql_in_clause(filters['turmas'])}")
+
+    if filters.get("disciplinas"):
+        where_clauses.append(f"DISCIPLINA IN {_format_sql_in_clause(filters['disciplinas'])}")
+
     if filters.get("data_inicio") and filters.get("data_fim"):
-        # Formata as datas para o padrão 'YYYY-MM-DD' que o BigQuery entende
         data_inicio_str = filters['data_inicio'].strftime('%Y-%m-%d')
         data_fim_str = filters['data_fim'].strftime('%Y-%m-%d')
         where_clauses.append(f"DATA_DO_RELATORIO BETWEEN '{data_inicio_str}' AND '{data_fim_str}'")
@@ -262,7 +303,7 @@ def query_data_from_bq(creds, dataset_id, filters):
     if where_clauses:
         sql_query += " WHERE " + " AND ".join(where_clauses)
 
-    sql_query += " ORDER BY DATA_DO_RELATORIO DESC, HORARIO LIMIT 1000"  # Limita a 1000 resultados para evitar sobrecarga
+    sql_query += " ORDER BY DATA_DO_RELATORIO DESC, HORARIO LIMIT 1000"
 
     try:
         df = pandas_gbq.read_gbq(sql_query, project_id=PROJECT_ID, credentials=creds)
@@ -270,3 +311,4 @@ def query_data_from_bq(creds, dataset_id, filters):
     except Exception as e:
         st.error(f"Erro ao executar a consulta no BigQuery: {e}")
         return pd.DataFrame()
+
