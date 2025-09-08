@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: 2_Carga_Inicial.py
-# Adicionada barra de progresso e estimativa de tempo para a carga de dados.
+# Melhorada a lógica de exibição do tempo estimado na barra de progresso.
 # ==============================================================================
 
 import streamlit as st
@@ -73,13 +73,13 @@ if uploaded_file is not None:
             df['SEMANA'] = pd.to_numeric(df['SEMANA'], errors='coerce').fillna(0).astype(int)
             df = df.sort_values(by='SEMANA').reset_index(drop=True)
 
-            # --- NOVA LÓGICA DE UPLOAD EM PEDAÇOS COM BARRA DE PROGRESSO ---
+            # --- LÓGICA DE UPLOAD EM PEDAÇOS COM BARRA DE PROGRESSO MELHORADA ---
             st.info("Iniciando o envio dos dados para o BigQuery em lotes...")
             progress_bar = st.progress(0, text="Preparando para o envio...")
             status_text = st.empty()
 
             total_rows = len(df)
-            chunk_size = 50000  # Define o tamanho de cada lote de envio
+            chunk_size = 50000
             chunks = [df[i:i + chunk_size] for i in range(0, total_rows, chunk_size)]
             total_chunks = len(chunks)
 
@@ -89,17 +89,19 @@ if uploaded_file is not None:
             tempo_inicio = time.time()
 
             for i, chunk in enumerate(chunks):
-                # O primeiro lote substitui a tabela, os seguintes adicionam ao final
                 modo_de_carga = 'replace' if i == 0 else 'append'
 
-                # Atualiza a barra de progresso
+                # --- ALTERAÇÃO APLICADA AQUI: Lógica de cálculo de tempo ---
                 progresso_atual = (i + 1) / total_chunks
                 tempo_decorrido = time.time() - tempo_inicio
-                tempo_medio_por_chunk = tempo_decorrido / (i + 1)
-                chunks_restantes = total_chunks - (i + 1)
-                tempo_restante_estimado = tempo_medio_por_chunk * chunks_restantes
 
-                texto_progresso = f"Enviando lote {i + 1} de {total_chunks}... Tempo restante estimado: {formatar_tempo(tempo_restante_estimado)}"
+                # Calcula o tempo total estimado com base na média atual
+                tempo_medio_por_chunk = tempo_decorrido / (i + 1)
+                tempo_total_estimado = tempo_medio_por_chunk * total_chunks
+
+                # Monta o texto para a barra de progresso, mostrando o tempo decorrido vs o total estimado
+                texto_progresso = f"Enviando lote {i + 1} de {total_chunks}... ({formatar_tempo(tempo_decorrido)} / ~{formatar_tempo(tempo_total_estimado)})"
+
                 progress_bar.progress(progresso_atual, text=texto_progresso)
                 status_text.write(f"Enviando {len(chunk):,} linhas...".replace(",", "."))
 
@@ -110,7 +112,7 @@ if uploaded_file is not None:
                     st.error(f"Falha ao enviar o lote {i + 1}. A operação foi interrompida.")
                     break
 
-                time.sleep(0.01)  # Pausa para a interface atualizar
+                time.sleep(0.01)
 
             progress_bar.empty()
             status_text.empty()
