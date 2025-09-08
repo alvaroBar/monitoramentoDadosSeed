@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: 5_Consultar_Dados.py
-# Adicionada validação para o intervalo de datas selecionado pelo usuário.
+# Adicionada formatação de data para exibição no padrão DD/MM/YYYY.
 # ==============================================================================
 
 import streamlit as st
@@ -125,6 +125,7 @@ if 'search_results' in st.session_state and submitted:
     if not df_results.empty:
         st.success(f"{len(df_results)} registros encontrados (limitado aos 1000 resultados mais recentes).")
 
+        # Mantém o dataframe original para o download do CSV
         csv_data = df_results.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Baixar resultados como CSV",
@@ -134,7 +135,22 @@ if 'search_results' in st.session_state and submitted:
             use_container_width=True
         )
 
-        st.dataframe(df_results)
+        # --- ALTERAÇÃO APLICADA AQUI: Formatação de datas para exibição ---
+        # Cria uma cópia do DataFrame para formatar a exibição sem alterar os dados originais
+        df_display = df_results.copy()
+
+        # Garante que as colunas de data/datetime existem antes de tentar formatá-las
+        if 'DATA_DO_RELATORIO' in df_display.columns:
+            df_display['DATA_DO_RELATORIO'] = pd.to_datetime(df_display['DATA_DO_RELATORIO']).dt.strftime('%d/%m/%Y')
+        if 'REGISTRO_DE_AULA' in df_display.columns:
+            # Converte para datetime e aplica o formato, mantendo os nulos (NaT) como nulos
+            df_display['REGISTRO_DE_AULA'] = pd.to_datetime(df_display['REGISTRO_DE_AULA']).dt.strftime(
+                '%d/%m/%Y %H:%M:%S').where(df_display['REGISTRO_DE_AULA'].notna())
+        if 'REGISTRO_DE_CONTEUDO' in df_display.columns:
+            df_display['REGISTRO_DE_CONTEUDO'] = pd.to_datetime(df_display['REGISTRO_DE_CONTEUDO']).dt.strftime(
+                '%d/%m/%Y %H:%M:%S').where(df_display['REGISTRO_DE_CONTEUDO'].notna())
+
+        st.dataframe(df_display)
     else:
         st.info("Nenhum registro encontrado com os filtros selecionados.")
 
