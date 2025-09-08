@@ -91,7 +91,7 @@ if uploaded_file is not None:
             for i, chunk in enumerate(chunks):
                 modo_de_carga = 'replace' if i == 0 else 'append'
 
-                # --- ALTERAÇÃO APLICADA AQUI: Lógica de cálculo de tempo restante ---
+                # --- ALTERAÇÃO APLICADA AQUI: Lógica de exibição de tempo ---
                 progresso_atual = (i + 1) / total_chunks
                 tempo_decorrido = time.time() - tempo_inicio
 
@@ -100,8 +100,10 @@ if uploaded_file is not None:
                 chunks_restantes = total_chunks - (i + 1)
                 tempo_restante_estimado = tempo_medio_por_chunk * chunks_restantes
 
-                # Monta o texto para a barra de progresso, mostrando o tempo restante
-                texto_progresso = f"Enviando lote {i + 1} de {total_chunks}... Tempo restante estimado: {formatar_tempo(tempo_restante_estimado)}"
+                # Monta um texto mais informativo para a barra de progresso
+                texto_progresso = (f"Enviando lote {i + 1}/{total_chunks} | "
+                                   f"Tempo decorrido: {formatar_tempo(tempo_decorrido)} | "
+                                   f"Restante est.: {formatar_tempo(tempo_restante_estimado)}")
 
                 progress_bar.progress(progresso_atual, text=texto_progresso)
                 status_text.write(f"Enviando {len(chunk):,} linhas...".replace(",", "."))
