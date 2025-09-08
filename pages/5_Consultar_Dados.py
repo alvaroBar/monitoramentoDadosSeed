@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: 5_Consultar_Dados.py
-# Corrigido o filtro de escolas para usar um seletor de múltipla escolha.
+# Adicionada validação para o intervalo de datas selecionado pelo usuário.
 # ==============================================================================
 
 import streamlit as st
@@ -63,50 +63,60 @@ with st.form(key="search_form"):
     with col1:
         filtro_semanas = st.multiselect("Semanas", options=opcoes_filtro.get("semanas", []))
         filtro_municipios = st.multiselect("Municípios", options=opcoes_filtro.get("municipios", []))
-        # --- CORREÇÃO APLICADA AQUI ---
         filtro_escolas = st.multiselect("Escolas", options=opcoes_filtro.get("escolas", []))
 
     with col2:
         filtro_disciplinas = st.multiselect("Disciplinas", options=opcoes_filtro.get("disciplinas", []))
         filtro_turmas = st.multiselect("Turmas", options=opcoes_filtro.get("turmas", []))
 
-        min_date = pd.to_datetime(opcoes_filtro.get("min_data")).to_pydatetime() if opcoes_filtro.get(
+        min_date_banco = pd.to_datetime(opcoes_filtro.get("min_data")).date() if opcoes_filtro.get(
             "min_data") else datetime.date(2020, 1, 1)
-        max_date = pd.to_datetime(opcoes_filtro.get("max_data")).to_pydatetime() if opcoes_filtro.get(
+        max_date_banco = pd.to_datetime(opcoes_filtro.get("max_data")).date() if opcoes_filtro.get(
             "max_data") else datetime.date.today()
 
         filtro_data = st.date_input(
             "Intervalo de Data do Relatório",
             value=[],
-            min_value=min_date,
-            max_value=max_date
+            min_value=min_date_banco,
+            max_value=max_date_banco
         )
 
     submitted = st.form_submit_button("Buscar no Banco de Dados", use_container_width=True, type="primary")
 
 if submitted:
-    # Coleta os filtros do formulário
-    filters = {
-        "semanas": filtro_semanas,
-        "municipios": filtro_municipios,
-        "escolas": filtro_escolas,
-        "disciplinas": filtro_disciplinas,
-        "turmas": filtro_turmas,
-        "data_inicio": filtro_data[0] if filtro_data and len(filtro_data) == 2 else None,
-        "data_fim": filtro_data[1] if filtro_data and len(filtro_data) == 2 else None,
-    }
+    data_inicio_selecionada = filtro_data[0] if filtro_data and len(filtro_data) == 2 else None
+    data_fim_selecionada = filtro_data[1] if filtro_data and len(filtro_data) == 2 else None
 
-    # Remove filtros vazios
-    filters = {k: v for k, v in filters.items() if v}
+    # --- NOVA LÓGICA DE VALIDAÇÃO DE DATA ---
+    data_valida = True
+    if data_inicio_selecionada and data_fim_selecionada:
+        # Compara a seleção do usuário com os limites do banco de dados
+        if data_inicio_selecionada < min_date_banco or data_fim_selecionada > max_date_banco:
+            st.error(
+                f"Intervalo de data inválido. Por favor, selecione datas entre {min_date_banco.strftime('%d/%m/%Y')} e {max_date_banco.strftime('%d/%m/%Y')}.")
+            data_valida = False
 
-    if not filters:
-        st.warning("Por favor, selecione pelo menos um filtro para iniciar a busca.")
-    else:
-        with st.spinner("A buscar dados no BigQuery..."):
-            st.session_state.search_results = query_data_from_bq(creds, dataset_id, filters)
+    if data_valida:
+        filters = {
+            "semanas": filtro_semanas,
+            "municipios": filtro_municipios,
+            "escolas": filtro_escolas,
+            "disciplinas": filtro_disciplinas,
+            "turmas": filtro_turmas,
+            "data_inicio": data_inicio_selecionada,
+            "data_fim": data_fim_selecionada,
+        }
+
+        filters = {k: v for k, v in filters.items() if v}
+
+        if not filters:
+            st.warning("Por favor, selecione pelo menos um filtro para iniciar a busca.")
+        else:
+            with st.spinner("A buscar dados no BigQuery..."):
+                st.session_state.search_results = query_data_from_bq(creds, dataset_id, filters)
 
 # --- Exibição dos Resultados ---
-if 'search_results' in st.session_state:
+if 'search_results' in st.session_state and submitted:
     st.markdown("---")
     st.header("Resultados da Busca")
 
