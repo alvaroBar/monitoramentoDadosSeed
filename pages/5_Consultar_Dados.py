@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: 5_Consultar_Dados.py
-# Permite ao usuário filtrar e buscar registros no banco de dados.
+# Corrigido o valor padrão do seletor de datas para evitar erro de inicialização.
 # ==============================================================================
 
 import streamlit as st
@@ -60,7 +60,9 @@ with st.form(key="search_form"):
 
     with col3:
         filtro_disciplina = st.text_input("Filtrar por Disciplina")
-        filtro_data = st.date_input("Filtrar por Data do Relatório", value=(None, None))
+        # --- CORREÇÃO APLICADA AQUI ---
+        # O valor padrão para um seletor de intervalo de datas vazio deve ser uma lista vazia.
+        filtro_data = st.date_input("Filtrar por Data do Relatório", value=[])
 
     submitted = st.form_submit_button("Buscar no Banco de Dados")
 
@@ -72,6 +74,7 @@ if submitted:
         "escola": filtro_escola,
         "turma": filtro_turma,
         "disciplina": filtro_disciplina,
+        # A lógica de verificação agora lida corretamente com a lista vazia
         "data_inicio": filtro_data[0] if filtro_data and len(filtro_data) == 2 else None,
         "data_fim": filtro_data[1] if filtro_data and len(filtro_data) == 2 else None,
     }
@@ -112,3 +115,4 @@ if 'search_results' in st.session_state:
         st.dataframe(df_results)
     else:
         st.info("Nenhum registro encontrado com os filtros selecionados.")
+
