@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: 5_Consultar_Dados.py
-# Interface de consulta aprimorada com seletores de múltipla escolha pré-carregados.
+# Corrigido o filtro de escolas para usar um seletor de múltipla escolha.
 # ==============================================================================
 
 import streamlit as st
@@ -58,20 +58,18 @@ st.header("Filtros de Busca")
 st.info("Preencha um ou mais campos abaixo para buscar os registros. Deixe em branco para ignorar um filtro.")
 
 with st.form(key="search_form"):
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
 
     with col1:
         filtro_semanas = st.multiselect("Semanas", options=opcoes_filtro.get("semanas", []))
         filtro_municipios = st.multiselect("Municípios", options=opcoes_filtro.get("municipios", []))
+        # --- CORREÇÃO APLICADA AQUI ---
+        filtro_escolas = st.multiselect("Escolas", options=opcoes_filtro.get("escolas", []))
 
     with col2:
         filtro_disciplinas = st.multiselect("Disciplinas", options=opcoes_filtro.get("disciplinas", []))
         filtro_turmas = st.multiselect("Turmas", options=opcoes_filtro.get("turmas", []))
 
-    with col3:
-        filtro_escola = st.text_input("Filtrar por nome da Escola (contém)")
-
-        # Converte as datas min/max para o formato correto, se existirem
         min_date = pd.to_datetime(opcoes_filtro.get("min_data")).to_pydatetime() if opcoes_filtro.get(
             "min_data") else datetime.date(2020, 1, 1)
         max_date = pd.to_datetime(opcoes_filtro.get("max_data")).to_pydatetime() if opcoes_filtro.get(
@@ -91,21 +89,20 @@ if submitted:
     filters = {
         "semanas": filtro_semanas,
         "municipios": filtro_municipios,
+        "escolas": filtro_escolas,
         "disciplinas": filtro_disciplinas,
         "turmas": filtro_turmas,
-        "escola": filtro_escola,
         "data_inicio": filtro_data[0] if filtro_data and len(filtro_data) == 2 else None,
         "data_fim": filtro_data[1] if filtro_data and len(filtro_data) == 2 else None,
     }
 
-    # Remove filtros vazios (listas vazias ou strings vazias)
+    # Remove filtros vazios
     filters = {k: v for k, v in filters.items() if v}
 
     if not filters:
         st.warning("Por favor, selecione pelo menos um filtro para iniciar a busca.")
     else:
         with st.spinner("A buscar dados no BigQuery..."):
-            # Armazena os resultados na sessão para persistirem
             st.session_state.search_results = query_data_from_bq(creds, dataset_id, filters)
 
 # --- Exibição dos Resultados ---
@@ -118,7 +115,6 @@ if 'search_results' in st.session_state:
     if not df_results.empty:
         st.success(f"{len(df_results)} registros encontrados (limitado aos 1000 resultados mais recentes).")
 
-        # Oferece o download dos resultados
         csv_data = df_results.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Baixar resultados como CSV",

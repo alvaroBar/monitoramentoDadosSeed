@@ -240,6 +240,7 @@ def get_filter_options(_creds, dataset_id):
     SELECT
       (SELECT ARRAY_AGG(DISTINCT SEMANA IGNORE NULLS ORDER BY SEMANA) FROM {table_ref}) AS semanas,
       (SELECT ARRAY_AGG(DISTINCT MUNICIPIO IGNORE NULLS ORDER BY MUNICIPIO) FROM {table_ref}) AS municipios,
+      (SELECT ARRAY_AGG(DISTINCT ESCOLA IGNORE NULLS ORDER BY ESCOLA) FROM {table_ref}) AS escolas,
       (SELECT ARRAY_AGG(DISTINCT DISCIPLINA IGNORE NULLS ORDER BY DISCIPLINA) FROM {table_ref}) AS disciplinas,
       (SELECT ARRAY_AGG(DISTINCT TURMA IGNORE NULLS ORDER BY TURMA) FROM {table_ref}) AS turmas,
       (SELECT MIN(DATA_DO_RELATORIO) FROM {table_ref}) as min_data,
@@ -252,7 +253,8 @@ def get_filter_options(_creds, dataset_id):
     except Exception as e:
         st.error(f"Erro ao buscar opções de filtro: {e}")
 
-    return {"semanas": [], "municipios": [], "disciplinas": [], "turmas": [], "min_data": None, "max_data": None}
+    return {"semanas": [], "municipios": [], "escolas": [], "disciplinas": [], "turmas": [], "min_data": None,
+            "max_data": None}
 
 
 # --- ALTERAÇÃO APLICADA AQUI: Função de apoio refatorada ---
@@ -264,7 +266,7 @@ def _format_sql_in_clause(values):
     if not values:
         return "('')"  # Retorna uma tupla vazia para evitar erro de sintaxe SQL
 
-    # Escapa aspas simples (' -> '') e envolve cada valor em aspas simples
+    # CORREÇÃO: Usa a sintaxe correta para escapar aspas em Python.
     formatted_values = [f"'{str(v).replace("'", "''")}'" for v in values]
     return f"({', '.join(formatted_values)})"
 
@@ -286,8 +288,8 @@ def query_data_from_bq(creds, dataset_id, filters):
     if filters.get("municipios"):
         where_clauses.append(f"MUNICIPIO IN {_format_sql_in_clause(filters['municipios'])}")
 
-    if filters.get("escola"):
-        where_clauses.append(f"UPPER(ESCOLA) LIKE '%{filters['escola'].upper()}%'")
+    if filters.get("escolas"):
+        where_clauses.append(f"ESCOLA IN {_format_sql_in_clause(filters['escolas'])}")
 
     if filters.get("turmas"):
         where_clauses.append(f"TURMA IN {_format_sql_in_clause(filters['turmas'])}")
