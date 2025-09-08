@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: 5_Consultar_Dados.py
-# Corrigida a formatação de data para o padrão DD/MM/YYYY usando conversão manual forçada.
+# Corrigida a formatação do widget de entrada de data para o padrão DD/MM/YYYY.
 # ==============================================================================
 
 import streamlit as st
@@ -74,11 +74,14 @@ with st.form(key="search_form"):
         max_date_banco = pd.to_datetime(opcoes_filtro.get("max_data")).date() if opcoes_filtro.get(
             "max_data") else datetime.date.today()
 
+        # --- ALTERAÇÃO APLICADA AQUI ---
+        # Adiciona o parâmetro 'format' para exibir a data no padrão DD/MM/YYYY.
         filtro_data = st.date_input(
             "Intervalo de Data do Relatório",
             value=[],
             min_value=min_date_banco,
-            max_value=max_date_banco
+            max_value=max_date_banco,
+            format="DD/MM/YYYY"
         )
 
     submitted = st.form_submit_button("Buscar no Banco de Dados", use_container_width=True, type="primary")
@@ -134,7 +137,6 @@ if 'search_results' in st.session_state and st.session_state.get('submitted_form
             use_container_width=True
         )
 
-        # --- ALTERAÇÃO APLICADA AQUI: Formatação Manual Forçada ---
         # Cria uma cópia do DataFrame para formatar a exibição sem alterar os dados originais.
         df_display = df_results.copy()
 
