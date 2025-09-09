@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA PRINCIPAL: 0_Dashboard.py
-# Adicionadas métricas de auditoria para registros não lançados.
+# O estilo foi aprimorado para corresponder ao layout de exemplo.
 # ==============================================================================
 
 import streamlit as st
@@ -9,9 +9,41 @@ from bigquery_loader import autenticar_usuario, get_dashboard_stats
 from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(
-    page_title="Dashboard de Relatórios",
+    page_title="Dashboard de Acompanhamento",
     layout="wide"
 )
+
+# --- CSS customizado para os cartões de métrica ---
+# Este bloco de código injeta CSS para estilizar os nossos cartões de métrica
+# para que se pareçam com o exemplo, com um fundo escuro e bordas.
+st.markdown("""
+<style>
+.metric-card {
+    background-color: #262730; /* Cor de fundo escura */
+    border-radius: 10px;
+    padding: 20px;
+    margin: 10px 0;
+    border: 1px solid #3c3f4b;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    text-align: center;
+    height: 150px; /* Garante que todos os cartões tenham a mesma altura */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.metric-card p {
+    margin: 0;
+    font-size: 1.1em;
+    color: #a0a4b8; /* Cor do rótulo */
+}
+.metric-card h2 {
+    margin: 5px 0 0 0;
+    font-size: 2.5em;
+    color: #ffffff; /* Cor do valor */
+    font-weight: 600;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # --- Autenticação e Lógica de Mapeamento ---
 autenticar_usuario()
@@ -48,9 +80,8 @@ st_autorefresh(interval=5 * 60 * 1000, key="session_refresher_dashboard")
 
 # --- Conteúdo do Dashboard ---
 
-st.title("📊 Dashboard de Relatórios LRCO")
-st.markdown(
-    f"Bem-vindo(a)! Estes são os dados atuais para o seu escritório (Dataset: `{st.session_state.dataset_id}`).")
+st.title("Dashboard de Acompanhamento LRCO")
+st.markdown(f"Visão geral dos dados para o seu escritório (Dataset: `{st.session_state.dataset_id}`).")
 
 # Busca os dados para o dashboard
 creds = st.session_state.credentials
@@ -62,24 +93,60 @@ with st.spinner("A carregar estatísticas..."):
 if stats:
     st.markdown("---")
 
-    # --- Métricas Principais ---
-    st.subheader("Visão Geral")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total de Registros", f"{stats.get('total_registros', 0):,}".replace(",", "."))
-    col2.metric("Total de Semanas Lançadas", stats.get('total_semanas', 0))
+    # --- ALTERAÇÃO APLICADA AQUI: Métricas exibidas como cartões estilizados ---
+    total_registros = stats.get('total_registros', 0)
+    total_semanas = stats.get('total_semanas', 0)
+    sem_registro_aula = stats.get('sem_registro_aula', 0)
+    sem_registro_conteudo = stats.get('sem_registro_conteudo', 0)
 
     ultima_data_str = "N/A"
     ultima_data_val = stats.get('ultima_data')
     if pd.notna(ultima_data_val):
         ultima_data_str = pd.to_datetime(ultima_data_val).strftime('%d/%m/%Y')
-    col3.metric("Último Relatório Recebido", ultima_data_str)
 
-    # --- Novas Métricas de Auditoria ---
-    st.markdown("---")
-    st.subheader("Auditoria de Lançamentos")
-    col4, col5 = st.columns(2)
-    col4.metric("Registos de Aula em Falta", f"{stats.get('sem_registro_aula', 0):,}".replace(",", "."))
-    col5.metric("Registos de Conteúdo em Falta", f"{stats.get('sem_registro_conteudo', 0):,}".replace(",", "."))
+    # Cria 5 colunas para as 5 métricas
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    with col1:
+        st.markdown(f"""
+        <div class="metric-card">
+            <p>Total de Registros</p>
+            <h2>{total_registros:,}</h2>
+        </div>
+        """.replace(",", "."), unsafe_allow_html=True)
+
+    with col2:
+        st.markdown(f"""
+        <div class="metric-card">
+            <p>Semanas Lançadas</p>
+            <h2>{total_semanas}</h2>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        st.markdown(f"""
+        <div class="metric-card">
+            <p>Último Lançamento</p>
+            <h2>{ultima_data_str}</h2>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col4:
+        st.markdown(f"""
+        <div class="metric-card">
+            <p>Aulas sem Registro</p>
+            <h2>{sem_registro_aula:,}</h2>
+        </div>
+        """.replace(",", "."), unsafe_allow_html=True)
+
+    with col5:
+        st.markdown(f"""
+        <div class="metric-card">
+            <p>Conteúdos sem Registro</p>
+            <h2>{sem_registro_conteudo:,}</h2>
+        </div>
+        """.replace(",", "."), unsafe_allow_html=True)
+
 
     st.markdown("---")
 
@@ -87,7 +154,7 @@ if stats:
     col_chart1, col_chart2 = st.columns(2)
 
     with col_chart1:
-        st.subheader("Registros por Semana")
+        st.subheader("Lançamentos por Semana")
         df_registros_semana = stats.get("registros_por_semana")
         if df_registros_semana is not None and not df_registros_semana.empty:
             st.bar_chart(df_registros_semana)
@@ -95,7 +162,7 @@ if stats:
             st.info("Não há dados de registros por semana para exibir.")
 
     with col_chart2:
-        st.subheader("Top 5 Disciplinas com Mais Lançamentos")
+        st.subheader("Disciplinas com mais Lançamentos")
         df_top_disciplinas = stats.get("top_disciplinas")
         if df_top_disciplinas is not None and not df_top_disciplinas.empty:
             st.dataframe(df_top_disciplinas, use_container_width=True, hide_index=True)
