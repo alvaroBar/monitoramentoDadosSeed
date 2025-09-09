@@ -257,30 +257,32 @@ def get_filter_options(_creds, dataset_id):
             "max_data": None}
 
 
-# --- ALTERAÇÃO APLICADA AQUI: Função de apoio refatorada ---
 def _format_sql_in_clause(values):
-    """
-    Formata uma lista de valores para uma cláusula IN, tratando aspas
-    de forma segura e Pythónica.
-    """
+    """Formata uma lista de valores para uma cláusula IN, tratando aspas."""
     if not values:
-        return "('')"  # Retorna uma tupla vazia para evitar erro de sintaxe SQL
+        return "('')"
 
-    # CORREÇÃO: Usa a sintaxe correta para escapar aspas em Python.
     formatted_values = [f"'{str(v).replace("'", "''")}'" for v in values]
     return f"({', '.join(formatted_values)})"
 
 
 def query_data_from_bq(creds, dataset_id, filters):
     """
-    Busca dados do BigQuery com base em um dicionário de filtros dinâmicos,
-    aceitando listas para os seletores de múltipla escolha.
+    Busca dados do BigQuery com base em um dicionário de filtros dinâmicos.
     """
     table_ref = f"`{PROJECT_ID}.{dataset_id}.relatorios_lrco`"
     sql_query = f"SELECT * FROM {table_ref}"
     where_clauses = []
 
-    # Constrói a cláusula WHERE dinamicamente usando a nova função de apoio
+    # --- ALTERAÇÃO APLICADA AQUI: Adiciona a lógica para o novo filtro de nulos ---
+    null_filter = filters.get("null_filter")
+    if null_filter == "aula":
+        where_clauses.append("REGISTRO_DE_AULA IS NULL")
+    elif null_filter == "conteudo":
+        where_clauses.append("REGISTRO_DE_CONTEUDO IS NULL")
+    elif null_filter == "ambos":
+        where_clauses.append("(REGISTRO_DE_AULA IS NULL OR REGISTRO_DE_CONTEUDO IS NULL)")
+
     if filters.get("semanas"):
         semanas_str = ','.join(map(str, filters['semanas']))
         where_clauses.append(f"SEMANA IN ({semanas_str})")

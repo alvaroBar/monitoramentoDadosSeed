@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: 5_Consultar_Dados.py
-# Corrigida a formatação do widget de entrada de data para o padrão DD/MM/YYYY.
+# Adicionada funcionalidade para filtrar por registros não lançados.
 # ==============================================================================
 
 import streamlit as st
@@ -69,53 +69,55 @@ with st.form(key="search_form"):
         filtro_disciplinas = st.multiselect("Disciplinas", options=opcoes_filtro.get("disciplinas", []))
         filtro_turmas = st.multiselect("Turmas", options=opcoes_filtro.get("turmas", []))
 
-        min_date_banco = pd.to_datetime(opcoes_filtro.get("min_data")).date() if opcoes_filtro.get(
-            "min_data") else datetime.date(2020, 1, 1)
-        max_date_banco = pd.to_datetime(opcoes_filtro.get("max_data")).date() if opcoes_filtro.get(
-            "max_data") else datetime.date.today()
-
-        # --- ALTERAÇÃO APLICADA AQUI ---
-        # Adiciona o parâmetro 'format' para exibir a data no padrão DD/MM/YYYY.
-        filtro_data = st.date_input(
-            "Intervalo de Data do Relatório",
-            value=[],
-            min_value=min_date_banco,
-            max_value=max_date_banco,
-            format="DD/MM/YYYY"
+        # --- NOVO FILTRO AQUI ---
+        filtro_nulos_opcao = st.selectbox(
+            "Filtrar por registros não lançados",
+            options=["Não filtrar", "Falta Registo da Aula", "Falta Registo do Conteúdo", "Falta um ou ambos"],
+            index=0
         )
+
+    min_date_banco = pd.to_datetime(opcoes_filtro.get("min_data")).date() if opcoes_filtro.get(
+        "min_data") else datetime.date(2020, 1, 1)
+    max_date_banco = pd.to_datetime(opcoes_filtro.get("max_data")).date() if opcoes_filtro.get(
+        "max_data") else datetime.date.today()
+
+    filtro_data = st.date_input(
+        "Intervalo de Data do Relatório",
+        value=[],
+        min_value=min_date_banco,
+        max_value=max_date_banco,
+        format="DD/MM/YYYY"
+    )
 
     submitted = st.form_submit_button("Buscar no Banco de Dados", use_container_width=True, type="primary")
 
 if submitted:
-    data_inicio_selecionada = filtro_data[0] if filtro_data and len(filtro_data) == 2 else None
-    data_fim_selecionada = filtro_data[1] if filtro_data and len(filtro_data) == 2 else None
+    # Mapeia a opção de filtro de nulos para a chave que o backend espera
+    null_filter_map = {
+        "Falta Registo da Aula": "aula",
+        "Falta Registo do Conteúdo": "conteudo",
+        "Falta um ou ambos": "ambos"
+    }
 
-    data_valida = True
-    if data_inicio_selecionada and data_fim_selecionada:
-        if data_inicio_selecionada < min_date_banco or data_fim_selecionada > max_date_banco:
-            st.error(
-                f"Intervalo de data inválido. Por favor, selecione datas entre {min_date_banco.strftime('%d/%m/%Y')} e {max_date_banco.strftime('%d/%m/%Y')}.")
-            data_valida = False
+    filters = {
+        "semanas": filtro_semanas,
+        "municipios": filtro_municipios,
+        "escolas": filtro_escolas,
+        "disciplinas": filtro_disciplinas,
+        "turmas": filtro_turmas,
+        "data_inicio": filtro_data[0] if filtro_data and len(filtro_data) == 2 else None,
+        "data_fim": filtro_data[1] if filtro_data and len(filtro_data) == 2 else None,
+        "null_filter": null_filter_map.get(filtro_nulos_opcao)
+    }
 
-    if data_valida:
-        filters = {
-            "semanas": filtro_semanas,
-            "municipios": filtro_municipios,
-            "escolas": filtro_escolas,
-            "disciplinas": filtro_disciplinas,
-            "turmas": filtro_turmas,
-            "data_inicio": data_inicio_selecionada,
-            "data_fim": data_fim_selecionada,
-        }
+    filters = {k: v for k, v in filters.items() if v}
 
-        filters = {k: v for k, v in filters.items() if v}
-
-        if not filters:
-            st.warning("Por favor, selecione pelo menos um filtro para iniciar a busca.")
-        else:
-            with st.spinner("A buscar dados no BigQuery..."):
-                st.session_state.search_results = query_data_from_bq(creds, dataset_id, filters)
-                st.session_state.submitted_form = True
+    if not filters:
+        st.warning("Por favor, selecione pelo menos um filtro para iniciar a busca.")
+    else:
+        with st.spinner("A buscar dados no BigQuery..."):
+            st.session_state.search_results = query_data_from_bq(creds, dataset_id, filters)
+            st.session_state.submitted_form = True
 
 # --- Exibição dos Resultados ---
 if 'search_results' in st.session_state and st.session_state.get('submitted_form'):
@@ -127,7 +129,6 @@ if 'search_results' in st.session_state and st.session_state.get('submitted_form
     if not df_results.empty:
         st.success(f"{len(df_results)} registros encontrados (limitado aos 1000 resultados mais recentes).")
 
-        # O download do CSV usará o DataFrame original, com os tipos de dados corretos.
         csv_data = df_results.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Baixar resultados como CSV",
@@ -137,22 +138,15 @@ if 'search_results' in st.session_state and st.session_state.get('submitted_form
             use_container_width=True
         )
 
-        # Cria uma cópia do DataFrame para formatar a exibição sem alterar os dados originais.
-        df_display = df_results.copy()
-
-        # Converte as colunas de data/datetime para o formato desejado como strings, tratando valores nulos.
-        if 'DATA_DO_RELATORIO' in df_display.columns:
-            df_display['DATA_DO_RELATORIO'] = pd.to_datetime(df_display['DATA_DO_RELATORIO']).dt.strftime(
-                '%d/%m/%Y').where(df_display['DATA_DO_RELATORIO'].notna())
-        if 'REGISTRO_DE_AULA' in df_display.columns:
-            df_display['REGISTRO_DE_AULA'] = pd.to_datetime(df_display['REGISTRO_DE_AULA']).dt.strftime(
-                '%d/%m/%Y %H:%M:%S').where(df_display['REGISTRO_DE_AULA'].notna())
-        if 'REGISTRO_DE_CONTEUDO' in df_display.columns:
-            df_display['REGISTRO_DE_CONTEUDO'] = pd.to_datetime(df_display['REGISTRO_DE_CONTEUDO']).dt.strftime(
-                '%d/%m/%Y %H:%M:%S').where(df_display['REGISTRO_DE_CONTEUDO'].notna())
-
-        st.dataframe(df_display, use_container_width=True)
-
+        st.dataframe(
+            df_results,
+            column_config={
+                "DATA_DO_RELATORIO": st.column_config.DateColumn("Data do Relatório", format="DD/MM/YYYY"),
+                "REGISTRO_DE_AULA": st.column_config.DatetimeColumn("Registo da Aula", format="DD/MM/YYYY HH:mm:ss"),
+                "REGISTRO_DE_CONTEUDO": st.column_config.DatetimeColumn("Registo do Conteúdo",
+                                                                        format="DD/MM/YYYY HH:mm:ss"),
+            },
+            use_container_width=True
+        )
     else:
         st.info("Nenhum registro encontrado com os filtros selecionados.")
-
