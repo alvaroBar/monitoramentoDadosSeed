@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: 5_Consultar_Dados.py
-# Adicionada funcionalidade para filtrar por registros não lançados.
+# Removido o limite de 1000 linhas na consulta de dados.
 # ==============================================================================
 
 import streamlit as st
@@ -69,7 +69,6 @@ with st.form(key="search_form"):
         filtro_disciplinas = st.multiselect("Disciplinas", options=opcoes_filtro.get("disciplinas", []))
         filtro_turmas = st.multiselect("Turmas", options=opcoes_filtro.get("turmas", []))
 
-        # --- NOVO FILTRO AQUI ---
         filtro_nulos_opcao = st.selectbox(
             "Filtrar por registros não lançados",
             options=["Não filtrar", "Falta Registo da Aula", "Falta Registo do Conteúdo", "Falta um ou ambos"],
@@ -92,7 +91,6 @@ with st.form(key="search_form"):
     submitted = st.form_submit_button("Buscar no Banco de Dados", use_container_width=True, type="primary")
 
 if submitted:
-    # Mapeia a opção de filtro de nulos para a chave que o backend espera
     null_filter_map = {
         "Falta Registo da Aula": "aula",
         "Falta Registo do Conteúdo": "conteudo",
@@ -127,7 +125,8 @@ if 'search_results' in st.session_state and st.session_state.get('submitted_form
     df_results = st.session_state.search_results
 
     if not df_results.empty:
-        st.success(f"{len(df_results)} registros encontrados (limitado aos 1000 resultados mais recentes).")
+        # --- ALTERAÇÃO APLICADA AQUI: Mensagem de sucesso atualizada ---
+        st.success(f"{len(df_results)} registros encontrados.")
 
         csv_data = df_results.to_csv(index=False).encode('utf-8')
         st.download_button(
@@ -150,3 +149,4 @@ if 'search_results' in st.session_state and st.session_state.get('submitted_form
         )
     else:
         st.info("Nenhum registro encontrado com os filtros selecionados.")
+

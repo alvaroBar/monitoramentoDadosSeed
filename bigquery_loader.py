@@ -274,15 +274,6 @@ def query_data_from_bq(creds, dataset_id, filters):
     sql_query = f"SELECT * FROM {table_ref}"
     where_clauses = []
 
-    # --- ALTERAÇÃO APLICADA AQUI: Adiciona a lógica para o novo filtro de nulos ---
-    null_filter = filters.get("null_filter")
-    if null_filter == "aula":
-        where_clauses.append("REGISTRO_DE_AULA IS NULL")
-    elif null_filter == "conteudo":
-        where_clauses.append("REGISTRO_DE_CONTEUDO IS NULL")
-    elif null_filter == "ambos":
-        where_clauses.append("(REGISTRO_DE_AULA IS NULL OR REGISTRO_DE_CONTEUDO IS NULL)")
-
     if filters.get("semanas"):
         semanas_str = ','.join(map(str, filters['semanas']))
         where_clauses.append(f"SEMANA IN ({semanas_str})")
@@ -304,10 +295,20 @@ def query_data_from_bq(creds, dataset_id, filters):
         data_fim_str = filters['data_fim'].strftime('%Y-%m-%d')
         where_clauses.append(f"DATA_DO_RELATORIO BETWEEN '{data_inicio_str}' AND '{data_fim_str}'")
 
+    if filters.get("null_filter"):
+        null_filter = filters["null_filter"]
+        if null_filter == "aula":
+            where_clauses.append("REGISTRO_DE_AULA IS NULL")
+        elif null_filter == "conteudo":
+            where_clauses.append("REGISTRO_DE_CONTEUDO IS NULL")
+        elif null_filter == "ambos":
+            where_clauses.append("(REGISTRO_DE_AULA IS NULL OR REGISTRO_DE_CONTEUDO IS NULL)")
+
     if where_clauses:
         sql_query += " WHERE " + " AND ".join(where_clauses)
 
-    sql_query += " ORDER BY DATA_DO_RELATORIO DESC, HORARIO LIMIT 1000"
+    # --- ALTERAÇÃO APLICADA AQUI: Cláusula LIMIT removida ---
+    sql_query += " ORDER BY DATA_DO_RELATORIO DESC, HORARIO"
 
     try:
         df = pandas_gbq.read_gbq(sql_query, project_id=PROJECT_ID, credentials=creds)
