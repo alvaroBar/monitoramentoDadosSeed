@@ -5,6 +5,7 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google.cloud import bigquery
+import streamlit.components.v1 as components
 
 # --- Configurações de Autenticação (Lidas dos Segredos do Streamlit) ---
 try:
@@ -77,14 +78,17 @@ def autenticar_usuario():
 def get_dashboard_stats(creds, dataset_id):
     """
     Busca estatísticas agregadas do BigQuery para o dashboard.
-    Usa consultas separadas para maior robustez.
+    Usa consultas separadas para maior robustez e adiciona contagens de nulos.
     """
     try:
+        # --- ALTERAÇÃO APLICADA AQUI: Consulta de estatísticas atualizada ---
         stats_query = f"""
             SELECT
                 COUNT(*) AS total_registros,
                 MAX(DATA_DO_RELATORIO) AS ultima_data,
-                COUNT(DISTINCT SEMANA) as total_semanas
+                COUNT(DISTINCT SEMANA) as total_semanas,
+                COUNTIF(REGISTRO_DE_AULA IS NULL) as sem_registro_aula,
+                COUNTIF(REGISTRO_DE_CONTEUDO IS NULL) as sem_registro_conteudo
             FROM `{PROJECT_ID}.{dataset_id}.relatorios_lrco`
         """
         df_stats = pandas_gbq.read_gbq(stats_query, project_id=PROJECT_ID, credentials=creds)
@@ -115,6 +119,8 @@ def get_dashboard_stats(creds, dataset_id):
             "total_registros": stats_data.get('total_registros', 0),
             "ultima_data": stats_data.get('ultima_data'),
             "total_semanas": stats_data.get('total_semanas', 0),
+            "sem_registro_aula": stats_data.get('sem_registro_aula', 0),
+            "sem_registro_conteudo": stats_data.get('sem_registro_conteudo', 0),
             "top_disciplinas": df_top_disciplinas,
             "registros_por_semana": df_registros_semana
         }
@@ -123,11 +129,14 @@ def get_dashboard_stats(creds, dataset_id):
         st.warning(f"Não foi possível buscar as estatísticas. A tabela pode estar vazia ou ocorreu um erro: {e}")
         return {
             "total_registros": 0, "ultima_data": None, "total_semanas": 0,
+            "sem_registro_aula": 0, "sem_registro_conteudo": 0,
             "top_disciplinas": pd.DataFrame(columns=['DISCIPLINA', 'contagem']),
             "registros_por_semana": pd.DataFrame(columns=['contagem'])
         }
 
 
+# (O restante do ficheiro bigquery_loader.py continua o mesmo)
+# ...
 def get_latest_week(creds, dataset_id):
     """Busca o maior número da coluna 'SEMANA' no BigQuery."""
     sql_query = f"SELECT MAX(SEMANA) as max_semana FROM `{PROJECT_ID}.{dataset_id}.relatorios_lrco`"
@@ -274,6 +283,15 @@ def query_data_from_bq(creds, dataset_id, filters):
     sql_query = f"SELECT * FROM {table_ref}"
     where_clauses = []
 
+    if filters.get("null_filter"):
+        null_filter = filters["null_filter"]
+        if null_filter == "aula":
+            where_clauses.append("REGISTRO_DE_AULA IS NULL")
+        elif null_filter == "conteudo":
+            where_clauses.append("REGISTRO_DE_CONTEUDO IS NULL")
+        elif null_filter == "ambos":
+            where_clauses.append("(REGISTRO_DE_AULA IS NULL OR REGISTRO_DE_CONTEUDO IS NULL)")
+
     if filters.get("semanas"):
         semanas_str = ','.join(map(str, filters['semanas']))
         where_clauses.append(f"SEMANA IN ({semanas_str})")
@@ -295,19 +313,9 @@ def query_data_from_bq(creds, dataset_id, filters):
         data_fim_str = filters['data_fim'].strftime('%Y-%m-%d')
         where_clauses.append(f"DATA_DO_RELATORIO BETWEEN '{data_inicio_str}' AND '{data_fim_str}'")
 
-    if filters.get("null_filter"):
-        null_filter = filters["null_filter"]
-        if null_filter == "aula":
-            where_clauses.append("REGISTRO_DE_AULA IS NULL")
-        elif null_filter == "conteudo":
-            where_clauses.append("REGISTRO_DE_CONTEUDO IS NULL")
-        elif null_filter == "ambos":
-            where_clauses.append("(REGISTRO_DE_AULA IS NULL OR REGISTRO_DE_CONTEUDO IS NULL)")
-
     if where_clauses:
         sql_query += " WHERE " + " AND ".join(where_clauses)
 
-    # --- ALTERAÇÃO APLICADA AQUI: Cláusula LIMIT removida ---
     sql_query += " ORDER BY DATA_DO_RELATORIO DESC, HORARIO"
 
     try:

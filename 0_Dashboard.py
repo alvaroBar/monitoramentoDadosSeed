@@ -1,3 +1,8 @@
+# ==============================================================================
+# ARQUIVO DA PÁGINA PRINCIPAL: 0_Dashboard.py
+# Adicionadas métricas de auditoria para registros não lançados.
+# ==============================================================================
+
 import streamlit as st
 import pandas as pd
 from bigquery_loader import autenticar_usuario, get_dashboard_stats
@@ -38,8 +43,8 @@ with st.sidebar:
         st.session_state.clear()
         st.rerun()
 
-# --- ALTERAÇÃO APLICADA AQUI: Keep-alive da sessão ---
-st_autorefresh(interval=5 * 60 * 1000, key="session_refresher_processar")
+# --- Keep-alive da sessão ---
+st_autorefresh(interval=5 * 60 * 1000, key="session_refresher_dashboard")
 
 # --- Conteúdo do Dashboard ---
 
@@ -51,23 +56,30 @@ st.markdown(
 creds = st.session_state.credentials
 dataset_id = st.session_state.dataset_id
 
-with st.spinner("Carregando estatísticas..."):
+with st.spinner("A carregar estatísticas..."):
     stats = get_dashboard_stats(creds, dataset_id)
 
 if stats:
     st.markdown("---")
 
     # --- Métricas Principais ---
+    st.subheader("Visão Geral")
     col1, col2, col3 = st.columns(3)
     col1.metric("Total de Registros", f"{stats.get('total_registros', 0):,}".replace(",", "."))
     col2.metric("Total de Semanas Lançadas", stats.get('total_semanas', 0))
 
-    # Formata a data para o padrão brasileiro
     ultima_data_str = "N/A"
     ultima_data_val = stats.get('ultima_data')
     if pd.notna(ultima_data_val):
         ultima_data_str = pd.to_datetime(ultima_data_val).strftime('%d/%m/%Y')
     col3.metric("Último Relatório Recebido", ultima_data_str)
+
+    # --- Novas Métricas de Auditoria ---
+    st.markdown("---")
+    st.subheader("Auditoria de Lançamentos")
+    col4, col5 = st.columns(2)
+    col4.metric("Registos de Aula em Falta", f"{stats.get('sem_registro_aula', 0):,}".replace(",", "."))
+    col5.metric("Registos de Conteúdo em Falta", f"{stats.get('sem_registro_conteudo', 0):,}".replace(",", "."))
 
     st.markdown("---")
 
@@ -92,3 +104,4 @@ if stats:
 
 else:
     st.info("Ainda não há dados lançados para este escritório.")
+
