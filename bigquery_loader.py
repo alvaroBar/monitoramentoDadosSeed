@@ -5,7 +5,6 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google.cloud import bigquery
-import streamlit.components.v1 as components
 import uuid
 import re
 
@@ -80,7 +79,6 @@ def autenticar_usuario():
 def get_dashboard_stats(creds, dataset_id):
     """
     Busca estatísticas agregadas do BigQuery para o dashboard.
-    Usa consultas separadas para maior robustez e adiciona contagens de nulos.
     """
     try:
         stats_query = f"""
@@ -116,24 +114,11 @@ def get_dashboard_stats(creds, dataset_id):
         if not df_registros_semana.empty:
             df_registros_semana = df_registros_semana.set_index('SEMANA')
 
-        return {
-            "total_registros": stats_data.get('total_registros', 0),
-            "ultima_data": stats_data.get('ultima_data'),
-            "total_semanas": stats_data.get('total_semanas', 0),
-            "sem_registro_aula": stats_data.get('sem_registro_aula', 0),
-            "sem_registro_conteudo": stats_data.get('sem_registro_conteudo', 0),
-            "top_disciplinas": df_top_disciplinas,
-            "registros_por_semana": df_registros_semana
-        }
+        return {**stats_data, "top_disciplinas": df_top_disciplinas, "registros_por_semana": df_registros_semana}
 
     except Exception as e:
-        st.warning(f"Não foi possível buscar as estatísticas. A tabela pode estar vazia ou ocorreu um erro: {e}")
-        return {
-            "total_registros": 0, "ultima_data": None, "total_semanas": 0,
-            "sem_registro_aula": 0, "sem_registro_conteudo": 0,
-            "top_disciplinas": pd.DataFrame(columns=['DISCIPLINA', 'contagem']),
-            "registros_por_semana": pd.DataFrame(columns=['contagem'])
-        }
+        st.warning(f"Não foi possível buscar as estatísticas: {e}")
+        return {}
 
 
 def get_latest_week(creds, dataset_id):
@@ -336,7 +321,7 @@ def query_data_from_bq(creds, dataset_id, filters):
         return pd.DataFrame()
 
 
-# --- NOVAS FUNÇÕES PARA GESTÃO DE ANÁLISES ---
+# --- Funções para Gestão de Análises ---
 
 def list_analysis_tables(creds, dataset_id):
     """Lista todas as tabelas de análise (que começam com 'analise_') em um dataset."""
@@ -379,20 +364,51 @@ def create_or_update_analysis(creds, dataset_id, analysis_name, weeks):
         return False, f"Erro ao criar/atualizar a análise: {e}"
 
 
-# --- ALTERAÇÃO APLICADA AQUI: Nova função para visualizar uma análise ---
-def get_analysis_table_data(creds, dataset_id, table_name):
-    """Busca todos os dados de uma tabela de análise específica."""
-    try:
-        # Validação de segurança para garantir que apenas tabelas de análise possam ser lidas
-        if not table_name.startswith('analise_'):
-            st.error("Nome de tabela inválido.")
-            return pd.DataFrame()
+# --- ALTERAÇÃO: Nova função para auditoria de análises ---
+@st.cache_data(ttl=600)  # Cache mais curto para auditorias
+def get_analysis_audit_stats(_creds, dataset_id, table_name):
+    """
+    Busca estatísticas de auditoria (registros nulos) de uma tabela de análise.
+    """
+    if not table_name.startswith('analise_'):
+        st.error("Nome de tabela de análise inválido.")
+        return None
 
-        table_ref = f"`{PROJECT_ID}.{dataset_id}.{table_name}`"
-        query = f"SELECT * FROM {table_ref} ORDER BY SEMANA, DATA_DO_RELATORIO"
-        df = pandas_gbq.read_gbq(query, project_id=PROJECT_ID, credentials=creds)
-        return df
+    table_ref = f"`{PROJECT_ID}.{dataset_id}.{table_name}`"
+
+    try:
+        # Consulta 1: Contagens gerais
+        counts_query = f"""
+            SELECT
+                COUNT(*) AS total_registros,
+                COUNTIF(REGISTRO_DE_AULA IS NULL) AS total_sem_aula,
+                COUNTIF(REGISTRO_DE_CONTEUDO IS NULL) AS total_sem_conteudo
+            FROM {table_ref}
+        """
+        df_counts = pandas_gbq.read_gbq(counts_query, project_id=PROJECT_ID, credentials=_creds)
+
+        # Consulta 2: Detalhes dos registros nulos por escola e disciplina
+        details_query = f"""
+            SELECT
+                ESCOLA,
+                DISCIPLINA,
+                COUNTIF(REGISTRO_DE_AULA IS NULL) AS aulas_faltantes,
+                COUNTIF(REGISTRO_DE_CONTEUDO IS NULL) AS conteudos_faltantes
+            FROM {table_ref}
+            GROUP BY ESCOLA, DISCIPLINA
+            HAVING aulas_faltantes > 0 OR conteudos_faltantes > 0
+            ORDER BY aulas_faltantes DESC, conteudos_faltantes DESC
+        """
+        df_details = pandas_gbq.read_gbq(details_query, project_id=PROJECT_ID, credentials=_creds)
+
+        # Junta os resultados num único dicionário
+        stats = {
+            "counts": df_counts.to_dict('records')[0] if not df_counts.empty else {},
+            "details": df_details
+        }
+        return stats
+
     except Exception as e:
-        st.error(f"Erro ao carregar os dados da análise: {e}")
-        return pd.DataFrame()
+        st.error(f"Erro ao gerar o relatório de auditoria: {e}")
+        return None
 

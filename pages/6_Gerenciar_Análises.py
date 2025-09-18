@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: 6_Gerenciar_Análises.py
-# Aprimorado para permitir a visualização e o download dos dados das análises.
+# Transformada em uma página de auditoria que exibe estatísticas de dados nulos.
 # ==============================================================================
 
 import streamlit as st
@@ -13,11 +13,11 @@ from bigquery_loader import (
     get_available_weeks,
     list_analysis_tables,
     create_or_update_analysis,
-    get_analysis_table_data
+    get_analysis_audit_stats  # Nova função importada
 )
 
 st.set_page_config(layout="wide")
-st.title("Gestão de Análises 🗂️")
+st.title("Auditoria de Análises de Dados 📋")
 
 autenticar_usuario()
 
@@ -55,14 +55,14 @@ creds = st.session_state.credentials
 dataset_id = st.session_state.dataset_id
 
 st.info(
-    "Use esta página para criar ou atualizar 'fotografias' dos seus dados para períodos específicos (ex: um bimestre ou trimestre). "
-    "Estas tabelas de análise podem ser usadas para comparações e relatórios."
+    "Use esta página para criar 'fotografias' dos seus dados para períodos específicos e depois gerar relatórios de auditoria sobre elas, "
+    "identificando registros com informações em falta."
 )
 
 st.markdown("---")
 
 # --- Secção 1: Criar ou Atualizar uma Análise ---
-with st.expander("➕ Criar / Atualizar uma Análise", expanded=True):
+with st.expander("➕ Criar / Atualizar uma Tabela de Análise", expanded=True):
     with st.form("analysis_form"):
         analysis_name = st.text_input(
             "Nome da Análise (ex: Primeiro Bimestre 2025)",
@@ -82,7 +82,7 @@ with st.expander("➕ Criar / Atualizar uma Análise", expanded=True):
                 default=[]
             )
 
-        submit_button = st.form_submit_button("Salvar Análise", use_container_width=True, type="primary")
+        submit_button = st.form_submit_button("Salvar Tabela de Análise", use_container_width=True, type="primary")
 
     if submit_button:
         if not analysis_name:
@@ -101,39 +101,52 @@ with st.expander("➕ Criar / Atualizar uma Análise", expanded=True):
 
 st.markdown("---")
 
-# --- Secção 2: Visualizar Análises Existentes ---
-st.header("Visualizar Análises Salvas")
+# --- Secção 2: Gerar Relatório de Auditoria ---
+st.header("Gerar Relatório de Auditoria")
 
 with st.spinner("A buscar análises existentes..."):
     analysis_tables = list_analysis_tables(creds, dataset_id)
 
 if not analysis_tables:
-    st.info("Ainda não há nenhuma tabela de análise criada para este escritório.")
+    st.info("Ainda não há nenhuma tabela de análise criada. Crie uma acima para começar.")
 else:
-    # Cria uma lista de opções mais amigável para o usuário
-    table_options = ["Selecione uma análise para visualizar..."] + sorted(analysis_tables)
+    table_options = ["Selecione uma análise para auditar..."] + sorted(analysis_tables)
     selected_table = st.selectbox("Análises Disponíveis:", options=table_options)
 
-    # Se o usuário selecionou uma tabela válida (não a opção padrão)
-    if selected_table != "Selecione uma análise para visualizar...":
-        with st.spinner(f"A carregar dados da análise '{selected_table}'..."):
-            df_analysis = get_analysis_table_data(creds, dataset_id, selected_table)
+    if selected_table != "Selecione uma análise para auditar...":
+        with st.spinner(f"A gerar relatório para a análise '{selected_table}'..."):
+            audit_stats = get_analysis_audit_stats(creds, dataset_id, selected_table)
 
-        if not df_analysis.empty:
-            st.success(f"{len(df_analysis)} registros encontrados na análise '{selected_table}'.")
+        if audit_stats:
+            counts = audit_stats.get("counts", {})
+            df_details = audit_stats.get("details", pd.DataFrame())
 
-            # Oferece o download dos dados da análise
-            csv_data = df_analysis.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label=f"📥 Baixar '{selected_table}' como CSV",
-                data=csv_data,
-                file_name=f"{selected_table}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
+            st.subheader(f"Resultados da Auditoria para '{selected_table}'")
 
-            # Exibe os dados da análise
-            st.dataframe(df_analysis, use_container_width=True)
+            # Exibe as métricas principais
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total de Registros na Análise", f"{counts.get('total_registros', 0):,}".replace(",", "."))
+            col2.metric("Aulas sem Registro", f"{counts.get('total_sem_aula', 0):,}".replace(",", "."))
+            col3.metric("Conteúdos sem Registro", f"{counts.get('total_sem_conteudo', 0):,}".replace(",", "."))
+
+            st.markdown("---")
+
+            # Exibe os detalhes
+            st.subheader("Detalhes dos Registros em Falta (por Escola e Disciplina)")
+
+            if not df_details.empty:
+                # Oferece o download dos detalhes da auditoria
+                csv_data = df_details.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label=f"📥 Baixar detalhes da auditoria como CSV",
+                    data=csv_data,
+                    file_name=f"auditoria_{selected_table}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+                st.dataframe(df_details, use_container_width=True)
+            else:
+                st.success("🎉 Não foram encontrados registros com aulas ou conteúdos em falta nesta análise.")
         else:
-            st.warning("Esta análise não contém dados ou não pôde ser carregada.")
+            st.warning("Não foi possível gerar o relatório de auditoria para esta análise.")
 
