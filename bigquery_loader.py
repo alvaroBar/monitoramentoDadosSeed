@@ -6,6 +6,8 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google.cloud import bigquery
 import streamlit.components.v1 as components
+import uuid
+import re
 
 # --- Configurações de Autenticação (Lidas dos Segredos do Streamlit) ---
 try:
@@ -81,7 +83,6 @@ def get_dashboard_stats(creds, dataset_id):
     Usa consultas separadas para maior robustez e adiciona contagens de nulos.
     """
     try:
-        # --- ALTERAÇÃO APLICADA AQUI: Consulta de estatísticas atualizada ---
         stats_query = f"""
             SELECT
                 COUNT(*) AS total_registros,
@@ -135,8 +136,6 @@ def get_dashboard_stats(creds, dataset_id):
         }
 
 
-# (O restante do ficheiro bigquery_loader.py continua o mesmo)
-# ...
 def get_latest_week(creds, dataset_id):
     """Busca o maior número da coluna 'SEMANA' no BigQuery."""
     sql_query = f"SELECT MAX(SEMANA) as max_semana FROM `{PROJECT_ID}.{dataset_id}.relatorios_lrco`"
@@ -149,7 +148,7 @@ def get_latest_week(creds, dataset_id):
 
 
 def carregar_dados_no_bigquery(df: pd.DataFrame, creds, dataset_id, mode='append'):
-    """Carrega um DataFrame do Pandas em uma tabela do BigQuery."""
+    """Carrega um DataFrame do Pandas na tabela histórica (relatorios_lrco)."""
     destination_table = f"{dataset_id}.relatorios_lrco"
     try:
         df_limpo = preparar_dataframe_para_bigquery(df)
@@ -163,7 +162,49 @@ def carregar_dados_no_bigquery(df: pd.DataFrame, creds, dataset_id, mode='append
         )
         return True
     except Exception as e:
-        st.error(f"Erro ao carregar dados no BigQuery: {e}")
+        st.error(f"Erro ao carregar dados na tabela histórica: {e}")
+        return False
+
+
+def upsert_dados_bimestre(df: pd.DataFrame, creds, dataset_id):
+    """
+    Atualiza ou insere (upsert) dados na tabela de bimestre (relatorios_bimestre).
+    """
+    try:
+        df_limpo = preparar_dataframe_para_bigquery(df)
+        client = bigquery.Client(credentials=creds, project=PROJECT_ID)
+
+        temp_table_id = f"{PROJECT_ID}.{dataset_id}.temp_upsert_{str(uuid.uuid4()).replace('-', '')}"
+        pandas_gbq.to_gbq(df_limpo, temp_table_id, project_id=PROJECT_ID, credentials=creds)
+
+        target_table = f"`{PROJECT_ID}.{dataset_id}.relatorios_bimestre`"
+        source_table = f"`{temp_table_id}`"
+
+        merge_query = f"""
+            MERGE {target_table} T
+            USING {source_table} S
+            ON  T.DATA_DO_RELATORIO = S.DATA_DO_RELATORIO
+            AND T.ESCOLA = S.ESCOLA AND T.TURMA = S.TURMA
+            AND T.HORARIO = S.HORARIO AND T.DISCIPLINA = S.DISCIPLINA
+            WHEN MATCHED THEN
+                UPDATE SET
+                    T.REGISTRO_DE_AULA = S.REGISTRO_DE_AULA,
+                    T.REGISTRO_DE_CONTEUDO = S.REGISTRO_DE_CONTEUDO,
+                    T.SEMANA = S.SEMANA
+            WHEN NOT MATCHED THEN
+                INSERT (SEMANA, DATA_DO_RELATORIO, MUNICIPIO, ESCOLA, TURMA, HORARIO, DISCIPLINA, REGISTRO_DE_AULA, REGISTRO_DE_CONTEUDO)
+                VALUES (S.SEMANA, S.DATA_DO_RELATORIO, S.MUNICIPIO, S.ESCOLA, S.TURMA, S.HORARIO, S.DISCIPLINA, S.REGISTRO_DE_AULA, S.REGISTRO_DE_CONTEUDO)
+        """
+        query_job = client.query(merge_query)
+        query_job.result()
+        client.delete_table(temp_table_id)
+        return True
+    except Exception as e:
+        st.error(f"Erro ao atualizar dados na tabela de bimestre: {e}")
+        try:
+            client.delete_table(temp_table_id)
+        except:
+            pass
         return False
 
 
@@ -192,17 +233,17 @@ def preparar_dataframe_para_bigquery(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def get_available_weeks(creds, dataset_id):
-    """Busca todas as semanas únicas e ordenadas disponíveis no BigQuery."""
+    """Busca todas as semanas únicas e ordenadas disponíveis na tabela histórica."""
     sql_query = f"SELECT DISTINCT SEMANA FROM `{PROJECT_ID}.{dataset_id}.relatorios_lrco` ORDER BY SEMANA"
     try:
         df = pandas_gbq.read_gbq(sql_query, project_id=PROJECT_ID, credentials=creds)
-        return df['SEMANA'].tolist()
+        return [week for week in df['SEMANA'].tolist() if week is not None]
     except Exception:
         return []
 
 
 def get_all_data_from_bq(creds, dataset_id, week_filter=None):
-    """Busca dados do BigQuery, com um filtro opcional por semana."""
+    """Busca dados da tabela histórica, com um filtro opcional por semana."""
     table_ref = f"`{PROJECT_ID}.{dataset_id}.relatorios_lrco`"
     sql_query = f"SELECT * FROM {table_ref}"
 
@@ -217,26 +258,15 @@ def get_all_data_from_bq(creds, dataset_id, week_filter=None):
 
 
 def delete_week_data(creds, dataset_id, week_to_delete):
-    """
-    Apaga os registros de uma semana específica usando o comando DELETE.
-    Esta função só funcionará se o faturamento estiver ativado no projeto do GCP.
-    """
+    """Apaga os registros de uma semana específica da tabela histórica."""
     try:
         client = bigquery.Client(credentials=creds, project=PROJECT_ID)
         table_ref = f"`{PROJECT_ID}.{dataset_id}.relatorios_lrco`"
-
         delete_query = f"DELETE FROM {table_ref} WHERE SEMANA = {week_to_delete}"
-
         query_job = client.query(delete_query)
         query_job.result()
-
         return True, f"Registros da semana {week_to_delete} apagados com sucesso."
-
     except Exception as e:
-        error_message = str(e)
-        if "DML statements are not supported in the free tier" in error_message or "billing account" in error_message:
-            return False, "Erro: A sua conta do BigQuery não suporta a exclusão de dados. Por favor, ative o faturamento no seu projeto do Google Cloud para habilitar esta funcionalidade."
-
         return False, f"Erro ao apagar os dados da semana: {e}"
 
 
@@ -244,7 +274,6 @@ def delete_week_data(creds, dataset_id, week_to_delete):
 def get_filter_options(_creds, dataset_id):
     """Busca todos os valores únicos para os filtros da página de consulta de uma só vez."""
     table_ref = f"`{PROJECT_ID}.{dataset_id}.relatorios_lrco`"
-
     query = f"""
     SELECT
       (SELECT ARRAY_AGG(DISTINCT SEMANA IGNORE NULLS ORDER BY SEMANA) FROM {table_ref}) AS semanas,
@@ -261,24 +290,19 @@ def get_filter_options(_creds, dataset_id):
             return df.to_dict('records')[0]
     except Exception as e:
         st.error(f"Erro ao buscar opções de filtro: {e}")
-
     return {"semanas": [], "municipios": [], "escolas": [], "disciplinas": [], "turmas": [], "min_data": None,
             "max_data": None}
 
 
 def _format_sql_in_clause(values):
     """Formata uma lista de valores para uma cláusula IN, tratando aspas."""
-    if not values:
-        return "('')"
-
+    if not values: return "('')"
     formatted_values = [f"'{str(v).replace("'", "''")}'" for v in values]
     return f"({', '.join(formatted_values)})"
 
 
 def query_data_from_bq(creds, dataset_id, filters):
-    """
-    Busca dados do BigQuery com base em um dicionário de filtros dinâmicos.
-    """
+    """Busca dados do BigQuery com base em um dicionário de filtros dinâmicos."""
     table_ref = f"`{PROJECT_ID}.{dataset_id}.relatorios_lrco`"
     sql_query = f"SELECT * FROM {table_ref}"
     where_clauses = []
@@ -292,36 +316,71 @@ def query_data_from_bq(creds, dataset_id, filters):
         elif null_filter == "ambos":
             where_clauses.append("(REGISTRO_DE_AULA IS NULL OR REGISTRO_DE_CONTEUDO IS NULL)")
 
-    if filters.get("semanas"):
-        semanas_str = ','.join(map(str, filters['semanas']))
-        where_clauses.append(f"SEMANA IN ({semanas_str})")
-
-    if filters.get("municipios"):
-        where_clauses.append(f"MUNICIPIO IN {_format_sql_in_clause(filters['municipios'])}")
-
-    if filters.get("escolas"):
-        where_clauses.append(f"ESCOLA IN {_format_sql_in_clause(filters['escolas'])}")
-
-    if filters.get("turmas"):
-        where_clauses.append(f"TURMA IN {_format_sql_in_clause(filters['turmas'])}")
-
-    if filters.get("disciplinas"):
-        where_clauses.append(f"DISCIPLINA IN {_format_sql_in_clause(filters['disciplinas'])}")
-
+    if filters.get("semanas"): where_clauses.append(f"SEMANA IN ({','.join(map(str, filters['semanas']))})")
+    if filters.get("municipios"): where_clauses.append(f"MUNICIPIO IN {_format_sql_in_clause(filters['municipios'])}")
+    if filters.get("escolas"): where_clauses.append(f"ESCOLA IN {_format_sql_in_clause(filters['escolas'])}")
+    if filters.get("turmas"): where_clauses.append(f"TURMA IN {_format_sql_in_clause(filters['turmas'])}")
+    if filters.get("disciplinas"): where_clauses.append(
+        f"DISCIPLINA IN {_format_sql_in_clause(filters['disciplinas'])}")
     if filters.get("data_inicio") and filters.get("data_fim"):
         data_inicio_str = filters['data_inicio'].strftime('%Y-%m-%d')
         data_fim_str = filters['data_fim'].strftime('%Y-%m-%d')
         where_clauses.append(f"DATA_DO_RELATORIO BETWEEN '{data_inicio_str}' AND '{data_fim_str}'")
 
-    if where_clauses:
-        sql_query += " WHERE " + " AND ".join(where_clauses)
-
+    if where_clauses: sql_query += " WHERE " + " AND ".join(where_clauses)
     sql_query += " ORDER BY DATA_DO_RELATORIO DESC, HORARIO"
-
     try:
-        df = pandas_gbq.read_gbq(sql_query, project_id=PROJECT_ID, credentials=creds)
-        return df
+        return pandas_gbq.read_gbq(sql_query, project_id=PROJECT_ID, credentials=creds)
     except Exception as e:
         st.error(f"Erro ao executar a consulta no BigQuery: {e}")
         return pd.DataFrame()
+
+
+# --- NOVAS FUNÇÕES PARA GESTÃO DE ANÁLISES ---
+
+def list_analysis_tables(creds, dataset_id):
+    """Lista todas as tabelas de análise (que começam com 'analise_') em um dataset."""
+    try:
+        client = bigquery.Client(credentials=creds, project=PROJECT_ID)
+        tables = client.list_tables(dataset_id)
+        # Filtra para manter apenas as tabelas que representam análises
+        analysis_tables = [table.table_id for table in tables if table.table_id.startswith('analise_')]
+        return analysis_tables
+    except Exception as e:
+        st.error(f"Erro ao listar as tabelas de análise: {e}")
+        return []
+
+
+def create_or_update_analysis(creds, dataset_id, analysis_name, weeks):
+    """
+    Cria ou substitui uma tabela de análise com dados de semanas específicas
+    da tabela histórica.
+    """
+    # Valida e formata o nome da análise para ser um nome de tabela válido
+    clean_name = re.sub(r'\W+', '_', analysis_name).lower()
+    if not clean_name:
+        return False, "O nome da análise é inválido."
+
+    destination_table = f"`{PROJECT_ID}.{dataset_id}.analise_{clean_name}`"
+    source_table = f"`{PROJECT_ID}.{dataset_id}.relatorios_lrco`"
+
+    if not weeks:
+        return False, "Por favor, selecione pelo menos uma semana para incluir na análise."
+
+    weeks_str = ','.join(map(str, weeks))
+
+    # Usa 'CREATE OR REPLACE TABLE' para criar ou atualizar a tabela de forma atômica
+    query = f"""
+        CREATE OR REPLACE TABLE {destination_table} AS
+        SELECT *
+        FROM {source_table}
+        WHERE SEMANA IN ({weeks_str})
+    """
+    try:
+        client = bigquery.Client(credentials=creds, project=PROJECT_ID)
+        query_job = client.query(query)
+        query_job.result()  # Aguarda a conclusão
+        return True, f"Análise '{analysis_name}' criada/atualizada com sucesso!"
+    except Exception as e:
+        return False, f"Erro ao criar/atualizar a análise: {e}"
 
