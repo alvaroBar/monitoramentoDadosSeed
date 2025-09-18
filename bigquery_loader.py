@@ -343,7 +343,6 @@ def list_analysis_tables(creds, dataset_id):
     try:
         client = bigquery.Client(credentials=creds, project=PROJECT_ID)
         tables = client.list_tables(dataset_id)
-        # Filtra para manter apenas as tabelas que representam análises
         analysis_tables = [table.table_id for table in tables if table.table_id.startswith('analise_')]
         return analysis_tables
     except Exception as e:
@@ -352,11 +351,7 @@ def list_analysis_tables(creds, dataset_id):
 
 
 def create_or_update_analysis(creds, dataset_id, analysis_name, weeks):
-    """
-    Cria ou substitui uma tabela de análise com dados de semanas específicas
-    da tabela histórica.
-    """
-    # Valida e formata o nome da análise para ser um nome de tabela válido
+    """Cria ou substitui uma tabela de análise com dados de semanas específicas."""
     clean_name = re.sub(r'\W+', '_', analysis_name).lower()
     if not clean_name:
         return False, "O nome da análise é inválido."
@@ -369,7 +364,6 @@ def create_or_update_analysis(creds, dataset_id, analysis_name, weeks):
 
     weeks_str = ','.join(map(str, weeks))
 
-    # Usa 'CREATE OR REPLACE TABLE' para criar ou atualizar a tabela de forma atômica
     query = f"""
         CREATE OR REPLACE TABLE {destination_table} AS
         SELECT *
@@ -379,8 +373,26 @@ def create_or_update_analysis(creds, dataset_id, analysis_name, weeks):
     try:
         client = bigquery.Client(credentials=creds, project=PROJECT_ID)
         query_job = client.query(query)
-        query_job.result()  # Aguarda a conclusão
+        query_job.result()
         return True, f"Análise '{analysis_name}' criada/atualizada com sucesso!"
     except Exception as e:
         return False, f"Erro ao criar/atualizar a análise: {e}"
+
+
+# --- ALTERAÇÃO APLICADA AQUI: Nova função para visualizar uma análise ---
+def get_analysis_table_data(creds, dataset_id, table_name):
+    """Busca todos os dados de uma tabela de análise específica."""
+    try:
+        # Validação de segurança para garantir que apenas tabelas de análise possam ser lidas
+        if not table_name.startswith('analise_'):
+            st.error("Nome de tabela inválido.")
+            return pd.DataFrame()
+
+        table_ref = f"`{PROJECT_ID}.{dataset_id}.{table_name}`"
+        query = f"SELECT * FROM {table_ref} ORDER BY SEMANA, DATA_DO_RELATORIO"
+        df = pandas_gbq.read_gbq(query, project_id=PROJECT_ID, credentials=creds)
+        return df
+    except Exception as e:
+        st.error(f"Erro ao carregar os dados da análise: {e}")
+        return pd.DataFrame()
 
