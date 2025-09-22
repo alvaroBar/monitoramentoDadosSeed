@@ -37,7 +37,7 @@ with st.sidebar:
     st.header("Usuário Autenticado")
     user_name = st.session_state.user_info.get("name", "N/A")
     st.write(f"Olá, **{user_name}**")
-    if st.button("Logout"):
+    if st.button("Logout", key="logout_Manutencao_de_Dados"):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.rerun()

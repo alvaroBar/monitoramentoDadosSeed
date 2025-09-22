@@ -154,7 +154,7 @@ except (AttributeError, KeyError):
 
 with st.sidebar:
     st.subheader(f"Olá, {user_name}!")
-    if st.button("Logout"):
+    if st.button("Logout", key="logout_Processar_Relatorios_PDF"):
         st.session_state.clear()
         st.rerun()
 
