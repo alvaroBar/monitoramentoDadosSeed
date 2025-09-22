@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: p1_Extrair_Dados_PDF.py
-# Foco exclusivo: Ler todos os PDFs e gerar um arquivo Parquet para download.
+# CORRIGIDO: Lógica de extração da DATA_DO_RELATORIO foi aprimorada.
 # ==============================================================================
 
 import streamlit as st
@@ -14,39 +14,51 @@ st.set_page_config(layout="wide")
 st.title("Passo 1: Extrair Dados dos Relatórios PDF 📄")
 
 
-# A função de extração foi mantida, pois é eficiente.
+# A função de extração foi corrigida
 def extrair_dados_de_pdf(arquivo_pdf, disciplinas_validas):
     dados_extraidos = []
     horario_re = r"\d{2}:\d{2}:\d{2}"
     registro_re = r"\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}"
     data_relatorio_re = r"\b\d{2}/\d{2}/\d{4}\b"
+
+    # Variáveis são reiniciadas para cada arquivo
     nome_escola, municipio, data_relatorio = "N/A", "N/A", "N/A"
     turma_atual = None
+    data_ja_encontrada = False  # Flag para otimização
+
     try:
         with pdfplumber.open(arquivo_pdf) as pdf:
             for page_num, page in enumerate(pdf.pages):
                 texto_pagina = page.extract_text()
                 if not texto_pagina: continue
+
                 linhas = texto_pagina.split("\n")
-                if page_num == 0:
+
+                # Procura os dados do cabeçalho em qualquer página, mas apenas uma vez
+                if not data_ja_encontrada:
                     for idx, linha in enumerate(linhas):
                         if "ESTADO DO PARANá" in linha.upper():
                             match_data = re.search(data_relatorio_re, linha)
-                            if match_data: data_relatorio = match_data.group()
+                            if match_data:
+                                data_relatorio = match_data.group()
+                                data_ja_encontrada = True  # Evita buscas futuras no mesmo arquivo
                         if "SECRETARIA DE ESTADO DA EDUCAÇÃO" in linha.upper():
                             municipio_temp = linha.split("SECRETARIA")[0].strip()
                             if municipio_temp: municipio = municipio_temp
                             if idx + 1 < len(linhas):
                                 nome_escola_temp = linhas[idx + 1].strip()
                                 if nome_escola_temp: nome_escola = nome_escola_temp
+
                 for linha in linhas:
                     linha = linha.strip()
                     if " - " in linha and "TURMA" not in linha.upper() and "LANÇAMENTO" not in linha.upper():
                         turma_atual = linha
                         continue
                     if not turma_atual: continue
+
                     horarios = re.findall(horario_re, linha)
                     if not horarios: continue
+
                     registros = re.findall(registro_re, linha)
                     horario = horarios[0]
                     pos_horario = linha.find(horario)
@@ -56,6 +68,7 @@ def extrair_dados_de_pdf(arquivo_pdf, disciplinas_validas):
                     pos_registro = linha.find(registros[0]) if registros else len(linha)
                     disciplina_raw = linha[pos_fim_horario:pos_registro].strip()
                     disciplina_encontrada = next((d for d in disciplinas_validas if d in disciplina_raw.upper()), None)
+
                     if disciplina_encontrada:
                         dados_extraidos.append([
                             data_relatorio, municipio, nome_escola, turma_atual, horario,
@@ -63,6 +76,7 @@ def extrair_dados_de_pdf(arquivo_pdf, disciplinas_validas):
                         ])
     except Exception:
         return pd.DataFrame()
+
     colunas = ["DATA_DO_RELATORIO", "MUNICIPIO", "ESCOLA", "TURMA", "HORARIO", "DISCIPLINA", "REGISTRO_DE_AULA",
                "REGISTRO_DE_CONTEUDO"]
     return pd.DataFrame(dados_extraidos, columns=colunas)
@@ -99,7 +113,6 @@ if uploaded_files and disciplinas_file:
 
                 if all_dfs:
                     st.session_state.final_df = pd.concat(all_dfs, ignore_index=True)
-                    # Limpa a memória
                     del all_dfs
                     gc.collect()
                 else:
@@ -112,7 +125,6 @@ if 'final_df' in st.session_state:
     st.success(f"Extração Concluída! {len(df_final)} registros foram lidos.")
     st.dataframe(df_final.head())
 
-    # Converte para Parquet em memória
     parquet_data = df_final.to_parquet(index=False)
 
     st.download_button(

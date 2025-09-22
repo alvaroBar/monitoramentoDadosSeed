@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: p2_Carregar_Dados_BigQuery.py
-# Foco exclusivo: Fazer o upload de um arquivo Parquet para o BigQuery.
+# CORRIGIDO: Agora exibe a lista nominal de turmas excluídas pelo filtro.
 # ==============================================================================
 
 import streamlit as st
@@ -59,17 +59,27 @@ if uploaded_parquet:
     df_filtrado = df_para_envio[~mascara_exclusao]
 
     turmas_excluidas = sorted(df_para_envio[mascara_exclusao]['TURMA'].unique())
-    if turmas_excluidas:
-        st.warning(f"{len(turmas_excluidas)} turmas foram filtradas automaticamente (EJA, MEC, etc.).")
 
-    df_filtrado['SEMANA'] = semana_para_envio
+    # --- ALTERAÇÃO APLICADA AQUI ---
+    if turmas_excluidas:
+        with st.expander(
+                f"ℹ️ {len(turmas_excluidas)} turmas foram removidas pelo filtro automático. Clique para ver a lista."):
+            # Exibe as turmas em colunas para melhor visualização
+            num_cols = 3
+            cols = st.columns(num_cols)
+            for i, turma in enumerate(turmas_excluidas):
+                cols[i % num_cols].write(f"- {turma}")
+    # --- FIM DA ALTERAÇÃO ---
+
+    df_filtrado_final = df_filtrado.copy()
+    df_filtrado_final['SEMANA'] = semana_para_envio
 
     st.markdown("---")
-    st.write(f"**Total de registros a serem enviados: {len(df_filtrado)}**")
+    st.write(f"**Total de registros a serem enviados: {len(df_filtrado_final)}**")
 
     if st.button("Enviar para o BigQuery", use_container_width=True, type="primary"):
         with st.spinner("Conectando e carregando dados... Este processo é rápido."):
-            sucesso = carregar_dados_no_bigquery(df_filtrado, creds, dataset_id, mode='append')
+            sucesso = carregar_dados_no_bigquery(df_filtrado_final, creds, dataset_id, mode='append')
             if sucesso:
                 st.success(f"Dados da semana {semana_para_envio} enviados com sucesso!")
                 st.balloons()
