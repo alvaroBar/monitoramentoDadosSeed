@@ -1,6 +1,7 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: p1_Processar_Relatorios_PDF.py
-# Adicionado filtro automático de turmas e notificação ao usuário.
+# Adicionado Modo de Depuração e tratamento de erros (try/except) para
+# evitar que o programa trave durante o processamento de PDFs.
 # ==============================================================================
 
 import streamlit as st
@@ -24,10 +25,11 @@ def formatar_tempo(segundos):
     return f"{int(segs)}s"
 
 
-def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, status_text):
+# A função de processamento agora aceita um parâmetro "debug_mode"
+def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, status_text, debug_mode=False):
     """
     Função principal que extrai os dados de uma lista de arquivos PDF,
-    atualizando uma barra de progresso e um texto de status.
+    com modo de depuração opcional.
     """
     dados_extraidos = []
     total_arquivos = len(lista_de_arquivos_pdf)
@@ -43,10 +45,14 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, sta
     semana = 0
 
     for i, arquivo_pdf in enumerate(lista_de_arquivos_pdf):
+        if debug_mode:
+            st.write(f"---")
+            st.write(f"**DEBUG: Iniciando processamento do arquivo `{arquivo_pdf.name}`**")
+
         progresso_atual = (i + 1) / total_arquivos
         tempo_decorrido = time.time() - tempo_inicio
 
-        if i > 0: # Evita divisão por zero no primeiro item
+        if i > 0:
             tempo_medio_por_arquivo = tempo_decorrido / (i + 1)
             arquivos_restantes = total_arquivos - (i + 1)
             tempo_restante_estimado = tempo_medio_por_arquivo * arquivos_restantes
@@ -61,8 +67,15 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, sta
 
         with pdfplumber.open(arquivo_pdf) as pdf:
             for page_num, page in enumerate(pdf.pages):
+                if debug_mode:
+                    st.write(f"**DEBUG:** Lendo página `{page_num + 1}`...")
+
                 texto_pagina = page.extract_text()
-                if not texto_pagina: continue
+                if not texto_pagina:
+                    if debug_mode:
+                        st.warning(f"**DEBUG:** Página `{page_num + 1}` sem texto extraível.")
+                    continue
+
                 linhas = texto_pagina.split("\n")
 
                 if page_num == 0:
@@ -77,42 +90,62 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, sta
                                 nome_escola_temp = linhas[idx + 1].strip()
                                 if nome_escola_temp: nome_escola = nome_escola_temp
 
-                for linha in linhas:
-                    linha = linha.strip()
-                    if " - " in linha and "TURMA" not in linha and "LANÇAMENTO" not in linha:
-                        turma_atual = linha
+                for line_num, linha in enumerate(linhas):
+                    # --- ADICIONADO PARA DEBUG: Bloco try/except ---
+                    # Este bloco tenta processar cada linha. Se falhar, ele reporta o erro
+                    # e continua, em vez de travar o programa.
+                    try:
+                        linha = linha.strip()
+                        if " - " in linha and "TURMA" not in linha and "LANÇAMENTO" not in linha:
+                            turma_atual = linha
+                            if debug_mode:
+                                st.info(f"**DEBUG:** Turma identificada: `{turma_atual}`")
+                            continue
+
+                        if not turma_atual: continue
+
+                        horarios = re.findall(horario_re, linha)
+                        if not horarios: continue
+
+                        # Se a linha contém um horário, é uma linha de dados e deve ser processada
+                        if debug_mode:
+                            st.write(f"**DEBUG:** (Linha {line_num + 1}) Candidata: `{linha}`")
+
+                        registros = re.findall(registro_re, linha)
+                        horario = horarios[0]
+                        pos_horario = linha.find(horario)
+                        pos_fim_horario = pos_horario + len(horario)
+                        registro_aula = registros[0] if len(registros) >= 1 else "Sem registro"
+                        registro_conteudo = registros[1] if len(registros) >= 2 else "Sem registro"
+                        pos_registro = linha.find(registros[0]) if registros else len(linha)
+                        disciplina_raw = linha[pos_fim_horario:pos_registro].strip()
+                        disciplina_encontrada = None
+                        for nome_disciplina in disciplinas_validas:
+                            if nome_disciplina in disciplina_raw.upper():
+                                disciplina_encontrada = nome_disciplina
+                                break
+
+                        if not disciplina_encontrada:
+                            if debug_mode:
+                                st.warning(f"**DEBUG:** Disciplina não encontrada na linha. Pulando.")
+                            continue
+
+                        dados_extraidos.append([
+                            semana, data_relatorio, municipio, nome_escola,
+                            turma_atual, horario, disciplina_encontrada,
+                            registro_aula, registro_conteudo
+                        ])
+                        if debug_mode:
+                            st.success(f"**DEBUG:** Linha processada com sucesso!")
+
+                    except Exception as e:
+                        if debug_mode:
+                            st.error(
+                                f"**DEBUG: ERRO ao processar a linha {line_num + 1} do arquivo `{arquivo_pdf.name}`!**")
+                            st.error(f"**--> Linha com problema:** `{linha}`")
+                            st.error(f"**--> Erro:** `{e}`")
+                        # Continua para a próxima linha
                         continue
-                    if not turma_atual: continue
-                    horarios = re.findall(horario_re, linha)
-                    registros = re.findall(registro_re, linha)
-                    if not horarios: continue
-                    horario = horarios[0]
-                    pos_horario = linha.find(horario)
-                    pos_fim_horario = pos_horario + len(horario)
-                    registro_aula = registros[0] if len(registros) >= 1 else "Sem registro"
-                    registro_conteudo = registros[1] if len(registros) >= 2 else "Sem registro"
-                    pos_registro = linha.find(registros[0]) if registros else len(linha)
-                    disciplina_raw = linha[pos_fim_horario:pos_registro].strip()
-                    disciplina_encontrada = None
-                    for nome_disciplina in disciplinas_validas:
-                        if nome_disciplina in disciplina_raw.upper():
-                            disciplina_encontrada = nome_disciplina
-                            break
-                    if not disciplina_encontrada: continue
-
-                    dados_extraidos.append([
-                        semana,
-                        data_relatorio,
-                        municipio,
-                        nome_escola,
-                        turma_atual,
-                        horario,
-                        disciplina_encontrada,
-                        registro_aula,
-                        registro_conteudo
-                    ])
-
-        time.sleep(0.01)
 
     status_text.empty()
     progress_bar.empty()
@@ -138,6 +171,7 @@ if 'user_info' not in st.session_state:
 
 # --- Lógica da Aplicação (Visível apenas após o login) ---
 user_info = st.session_state.user_info
+# ... (o resto da autenticação e mapeamento continua igual) ...
 user_email = user_info.get("email")
 user_name = user_info.get("name", "Usuário")
 
@@ -160,13 +194,15 @@ with st.sidebar:
 
 st_autorefresh(interval=5 * 60 * 1000, key="session_refresher_processar")
 
-# --- Lógica de Estado para o fluxo da página ---
 if 'etapa' not in st.session_state:
     st.session_state.etapa = "upload"
 
-# --- ETAPA 1: Upload e Processamento ---
 if st.session_state.etapa == "upload":
     st.header("Passo 1: Carregue os Arquivos")
+
+    # --- ADICIONADO PARA DEBUG ---
+    debug_mode = st.checkbox("Ativar Modo de Depuração",
+                             help="Marque esta caixa para ver detalhes do processo e mensagens de erro específicas.")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -184,18 +220,22 @@ if st.session_state.etapa == "upload":
                 progress_bar = st.progress(0, text="Iniciando processamento...")
                 status_text = st.empty()
 
-                df_temp = processar_pdfs(uploaded_files, lista_disciplinas_validas, progress_bar, status_text)
+                # Passa o estado do checkbox para a função de processamento
+                df_temp = processar_pdfs(uploaded_files, lista_disciplinas_validas, progress_bar, status_text,
+                                         debug_mode)
 
                 if not df_temp.empty:
                     st.session_state.df_processado = df_temp
                     st.session_state.etapa = "configurar_envio"
                     st.rerun()
                 else:
-                    st.warning("Nenhum registro válido foi encontrado nos PDFs. Verifique os arquivos.")
+                    st.warning(
+                        "Nenhum registro válido foi encontrado nos PDFs. Verifique os arquivos e o output do modo de depuração (se ativo).")
 
             except Exception as e:
-                st.error(f"Ocorreu um erro durante o processamento: {e}")
+                st.error(f"Ocorreu um erro geral durante o processamento: {e}")
 
+# O restante do arquivo (ETAPA 2 e ETAPA 3) permanece o mesmo.
 # --- ETAPA 2: Configuração e Envio ---
 elif st.session_state.etapa == "configurar_envio":
     df_processado = st.session_state.df_processado
@@ -207,23 +247,18 @@ elif st.session_state.etapa == "configurar_envio":
     termos_para_excluir = ['aut', 'mec', 'eja', 'ali', 'gas', 'eletrom']
     regex_pattern = '|'.join(termos_para_excluir)
 
-    # Identifica as turmas a serem excluídas (ignorando maiúsculas/minúsculas)
     mascara_exclusao = df_processado['TURMA'].str.contains(regex_pattern, case=False, na=False)
     turmas_excluidas_auto = sorted(df_processado[mascara_exclusao]['TURMA'].unique())
 
-    # Cria o dataframe já com o filtro automático aplicado
     df_filtrado_auto = df_processado[~mascara_exclusao]
 
-    # Informa ao usuário quais turmas foram filtradas automaticamente
     if turmas_excluidas_auto:
-        st.info(f"**Filtro Automático:** As seguintes {len(turmas_excluidas_auto)} turmas foram removidas da seleção por conterem termos pré-definidos (como 'EJA', 'MEC', etc.):")
-        # Exibe as turmas em colunas para melhor visualização
+        st.info(
+            f"**Filtro Automático:** As seguintes {len(turmas_excluidas_auto)} turmas foram removidas da seleção por conterem termos pré-definidos (como 'EJA', 'MEC', etc.):")
         num_cols = 3
         cols = st.columns(num_cols)
         for i, turma in enumerate(turmas_excluidas_auto):
             cols[i % num_cols].write(f"- {turma}")
-    # --- FIM DA LÓGICA DE FILTRO AUTOMÁTICO ---
-
 
     creds = st.session_state.credentials
     dataset_id = st.session_state.dataset_id
@@ -240,7 +275,6 @@ elif st.session_state.etapa == "configurar_envio":
         )
 
     st.markdown("#### Filtrar Turmas Manualmente (Opcional)")
-    # A lista de turmas para o filtro manual agora vem do dataframe já filtrado
     turmas_encontradas = sorted(df_filtrado_auto['TURMA'].unique())
 
     filtro_texto_turma = st.text_input(
@@ -301,7 +335,6 @@ elif st.session_state.etapa == "sucesso":
     st.balloons()
 
     if st.button("Iniciar Novo Lançamento", use_container_width=True):
-        # Limpa o dataframe processado para evitar que dados antigos persistam
         if 'df_processado' in st.session_state:
             del st.session_state['df_processado']
         st.session_state.etapa = "upload"
