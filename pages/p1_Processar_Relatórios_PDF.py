@@ -1,7 +1,7 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: p1_Processar_Relatorios_PDF.py
-# Adicionado Modo de Depuração e tratamento de erros (try/except) para
-# evitar que o programa trave durante o processamento de PDFs.
+# Otimizado o Modo de Depuração para exibir apenas as falhas e erros,
+# evitando a sobrecarga do Streamlit.
 # ==============================================================================
 
 import streamlit as st
@@ -25,11 +25,10 @@ def formatar_tempo(segundos):
     return f"{int(segs)}s"
 
 
-# A função de processamento agora aceita um parâmetro "debug_mode"
 def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, status_text, debug_mode=False):
     """
     Função principal que extrai os dados de uma lista de arquivos PDF,
-    com modo de depuração opcional.
+    com modo de depuração otimizado para reportar apenas falhas.
     """
     dados_extraidos = []
     total_arquivos = len(lista_de_arquivos_pdf)
@@ -44,11 +43,10 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, sta
     data_relatorio = "DATA NÃO IDENTIFICADA"
     semana = 0
 
-    for i, arquivo_pdf in enumerate(lista_de_arquivos_pdf):
-        if debug_mode:
-            st.write(f"---")
-            st.write(f"**DEBUG: Iniciando processamento do arquivo `{arquivo_pdf.name}`**")
+    if debug_mode:
+        st.info("O Modo de Depuração está ativo. Somente erros e falhas de processamento serão exibidos abaixo.")
 
+    for i, arquivo_pdf in enumerate(lista_de_arquivos_pdf):
         progresso_atual = (i + 1) / total_arquivos
         tempo_decorrido = time.time() - tempo_inicio
 
@@ -56,7 +54,7 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, sta
             tempo_medio_por_arquivo = tempo_decorrido / (i + 1)
             arquivos_restantes = total_arquivos - (i + 1)
             tempo_restante_estimado = tempo_medio_por_arquivo * arquivos_restantes
-            texto_progresso = f"Processando arquivo {i + 1} de {total_arquivos}... Tempo restante estimado: {formatar_tempo(tempo_restante_estimado)}"
+            texto_progresso = f"Processando arquivo {i + 1} de {total_arquivos}... Tempo restante: {formatar_tempo(tempo_restante_estimado)}"
         else:
             texto_progresso = f"Processando arquivo {i + 1} de {total_arquivos}..."
 
@@ -67,13 +65,8 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, sta
 
         with pdfplumber.open(arquivo_pdf) as pdf:
             for page_num, page in enumerate(pdf.pages):
-                if debug_mode:
-                    st.write(f"**DEBUG:** Lendo página `{page_num + 1}`...")
-
                 texto_pagina = page.extract_text()
                 if not texto_pagina:
-                    if debug_mode:
-                        st.warning(f"**DEBUG:** Página `{page_num + 1}` sem texto extraível.")
                     continue
 
                 linhas = texto_pagina.split("\n")
@@ -91,25 +84,18 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, sta
                                 if nome_escola_temp: nome_escola = nome_escola_temp
 
                 for line_num, linha in enumerate(linhas):
-                    # --- ADICIONADO PARA DEBUG: Bloco try/except ---
-                    # Este bloco tenta processar cada linha. Se falhar, ele reporta o erro
-                    # e continua, em vez de travar o programa.
                     try:
                         linha = linha.strip()
                         if " - " in linha and "TURMA" not in linha and "LANÇAMENTO" not in linha:
                             turma_atual = linha
-                            if debug_mode:
-                                st.info(f"**DEBUG:** Turma identificada: `{turma_atual}`")
                             continue
 
-                        if not turma_atual: continue
+                        if not turma_atual:
+                            continue
 
                         horarios = re.findall(horario_re, linha)
-                        if not horarios: continue
-
-                        # Se a linha contém um horário, é uma linha de dados e deve ser processada
-                        if debug_mode:
-                            st.write(f"**DEBUG:** (Linha {line_num + 1}) Candidata: `{linha}`")
+                        if not horarios:
+                            continue
 
                         registros = re.findall(registro_re, linha)
                         horario = horarios[0]
@@ -120,6 +106,7 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, sta
                         pos_registro = linha.find(registros[0]) if registros else len(linha)
                         disciplina_raw = linha[pos_fim_horario:pos_registro].strip()
                         disciplina_encontrada = None
+
                         for nome_disciplina in disciplinas_validas:
                             if nome_disciplina in disciplina_raw.upper():
                                 disciplina_encontrada = nome_disciplina
@@ -127,7 +114,10 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, sta
 
                         if not disciplina_encontrada:
                             if debug_mode:
-                                st.warning(f"**DEBUG:** Disciplina não encontrada na linha. Pulando.")
+                                st.warning(
+                                    f"**DEBUG: FALHA LÓGICA** na linha `{line_num + 1}` (Pág. {page_num + 1}, Arquivo: `{arquivo_pdf.name}`).")
+                                st.warning(
+                                    f"--> **Motivo:** Disciplina não identificada no trecho: `{disciplina_raw}`.")
                             continue
 
                         dados_extraidos.append([
@@ -135,16 +125,13 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, sta
                             turma_atual, horario, disciplina_encontrada,
                             registro_aula, registro_conteudo
                         ])
-                        if debug_mode:
-                            st.success(f"**DEBUG:** Linha processada com sucesso!")
 
                     except Exception as e:
                         if debug_mode:
                             st.error(
-                                f"**DEBUG: ERRO ao processar a linha {line_num + 1} do arquivo `{arquivo_pdf.name}`!**")
-                            st.error(f"**--> Linha com problema:** `{linha}`")
-                            st.error(f"**--> Erro:** `{e}`")
-                        # Continua para a próxima linha
+                                f"**DEBUG: ERRO CRÍTICO** ao processar a linha `{line_num + 1}` (Pág. {page_num + 1}, Arquivo: `{arquivo_pdf.name}`!). O programa não travou.")
+                            st.error(f"--> **Linha com problema:** `{linha}`")
+                            st.error(f"--> **Erro:** `{e}`")
                         continue
 
     status_text.empty()
@@ -169,9 +156,7 @@ if 'user_info' not in st.session_state:
     st.info("Por favor, faça login com a sua conta Google para continuar.")
     st.stop()
 
-# --- Lógica da Aplicação (Visível apenas após o login) ---
 user_info = st.session_state.user_info
-# ... (o resto da autenticação e mapeamento continua igual) ...
 user_email = user_info.get("email")
 user_name = user_info.get("name", "Usuário")
 
@@ -200,9 +185,8 @@ if 'etapa' not in st.session_state:
 if st.session_state.etapa == "upload":
     st.header("Passo 1: Carregue os Arquivos")
 
-    # --- ADICIONADO PARA DEBUG ---
     debug_mode = st.checkbox("Ativar Modo de Depuração",
-                             help="Marque esta caixa para ver detalhes do processo e mensagens de erro específicas.")
+                             help="Marque esta caixa para exibir apenas as falhas e erros encontrados durante o processamento dos PDFs.")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -220,7 +204,6 @@ if st.session_state.etapa == "upload":
                 progress_bar = st.progress(0, text="Iniciando processamento...")
                 status_text = st.empty()
 
-                # Passa o estado do checkbox para a função de processamento
                 df_temp = processar_pdfs(uploaded_files, lista_disciplinas_validas, progress_bar, status_text,
                                          debug_mode)
 
@@ -236,14 +219,12 @@ if st.session_state.etapa == "upload":
                 st.error(f"Ocorreu um erro geral durante o processamento: {e}")
 
 # O restante do arquivo (ETAPA 2 e ETAPA 3) permanece o mesmo.
-# --- ETAPA 2: Configuração e Envio ---
 elif st.session_state.etapa == "configurar_envio":
     df_processado = st.session_state.df_processado
     st.success(f"✅ {len(df_processado)} registros foram extraídos com sucesso.")
 
     st.header("Passo 2: Configure e Envie os Dados")
 
-    # --- LÓGICA DE FILTRO AUTOMÁTICO ADICIONADA AQUI ---
     termos_para_excluir = ['aut', 'mec', 'eja', 'ali', 'gas', 'eletrom']
     regex_pattern = '|'.join(termos_para_excluir)
 
@@ -329,7 +310,6 @@ elif st.session_state.etapa == "configurar_envio":
     else:
         st.warning("Nenhuma turma foi selecionada ou todas as turmas foram excluídas. Nenhum dado será enviado.")
 
-# --- ETAPA 3: Sucesso e Recomeço ---
 elif st.session_state.etapa == "sucesso":
     st.success(f"Dados da semana {st.session_state.semana_enviada} enviados para o BigQuery com sucesso!")
     st.balloons()
