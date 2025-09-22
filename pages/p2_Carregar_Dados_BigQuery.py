@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: p2_Carregar_Dados_BigQuery.py
-# CORRIGIDO: Agora exibe a lista nominal de turmas excluídas pelo filtro.
+# CORRIGIDO: Adicionadas 3 turmas/escolas específicas à lista de exclusão.
 # ==============================================================================
 
 import streamlit as st
@@ -51,25 +51,45 @@ if uploaded_parquet:
         min_value=1, value=semana_sugerida, step=1
     )
 
-    # Filtro automático
+    # --- LÓGICA DE FILTRO ATUALIZADA ---
+
+    # Filtro 1: Por palavras-chave no nome da turma
     termos_para_excluir = ['aut', 'mec', 'eja', 'ali', 'gas', 'eletrom']
     regex_pattern = '|'.join(termos_para_excluir)
+    mascara_keywords = df_para_envio['TURMA'].str.contains(regex_pattern, case=False, na=False)
 
-    mascara_exclusao = df_para_envio['TURMA'].str.contains(regex_pattern, case=False, na=False)
-    df_filtrado = df_para_envio[~mascara_exclusao]
+    # Filtro 2: Por combinação específica de Turma e Escola
+    turmas_escolas_excluir = [
+        ('6º Ano - Integral - D', 'ANTONIO M CERETTA, C E-EF M PROFIS'),
+        ('3ª Série - Noite - E - ENSINO MEDIO', 'ARTHUR C E SILVA, C E PRES-EF M'),
+        ('3ª Série - Noite - C - ENSINO MEDIO', 'ARTHUR C E SILVA, C E PRES-EF M')
+    ]
 
-    turmas_excluidas = sorted(df_para_envio[mascara_exclusao]['TURMA'].unique())
+    # Inicializa a máscara específica com todos os valores como Falso
+    mascara_especifica = pd.Series([False] * len(df_para_envio), index=df_para_envio.index)
 
-    # --- ALTERAÇÃO APLICADA AQUI ---
+    # Adiciona uma condição OR para cada par (turma, escola)
+    for turma, escola in turmas_escolas_excluir:
+        mascara_especifica |= (df_para_envio['TURMA'] == turma) & (df_para_envio['ESCOLA'] == escola)
+
+    # Combina as duas máscaras de exclusão
+    mascara_total_exclusao = mascara_keywords | mascara_especifica
+
+    # Aplica o filtro final
+    df_filtrado = df_para_envio[~mascara_total_exclusao]
+
+    # Pega a lista de turmas que foram excluídas para exibir ao usuário
+    turmas_excluidas = sorted(df_para_envio[mascara_total_exclusao]['TURMA'].unique())
+
     if turmas_excluidas:
         with st.expander(
                 f"ℹ️ {len(turmas_excluidas)} turmas foram removidas pelo filtro automático. Clique para ver a lista."):
-            # Exibe as turmas em colunas para melhor visualização
             num_cols = 3
             cols = st.columns(num_cols)
             for i, turma in enumerate(turmas_excluidas):
                 cols[i % num_cols].write(f"- {turma}")
-    # --- FIM DA ALTERAÇÃO ---
+
+    # --- FIM DA LÓGICA DE FILTRO ---
 
     df_filtrado_final = df_filtrado.copy()
     df_filtrado_final['SEMANA'] = semana_para_envio
