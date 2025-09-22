@@ -1,6 +1,6 @@
 # ==============================================================================
-# ARQUIVO DA PÁGINA: p1_Processar_Relatórios_PDF.py
-# Adicionado "keep-alive" para a sessão do usuário.
+# ARQUIVO DA PÁGINA: p1_Processar_Relatorios_PDF.py
+# Adicionado filtro automático de turmas e notificação ao usuário.
 # ==============================================================================
 
 import streamlit as st
@@ -46,7 +46,7 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, sta
         progresso_atual = (i + 1) / total_arquivos
         tempo_decorrido = time.time() - tempo_inicio
 
-        if i + 1 > 0:
+        if i > 0: # Evita divisão por zero no primeiro item
             tempo_medio_por_arquivo = tempo_decorrido / (i + 1)
             arquivos_restantes = total_arquivos - (i + 1)
             tempo_restante_estimado = tempo_medio_por_arquivo * arquivos_restantes
@@ -154,11 +154,10 @@ except (AttributeError, KeyError):
 
 with st.sidebar:
     st.subheader(f"Olá, {user_name}!")
-    if st.button("Logout", key="logout_Processar_Relatorios_PDF"):
+    if st.button("Logout", key="logout_processar"):
         st.session_state.clear()
         st.rerun()
 
-# --- ALTERAÇÃO APLICADA AQUI: Keep-alive da sessão ---
 st_autorefresh(interval=5 * 60 * 1000, key="session_refresher_processar")
 
 # --- Lógica de Estado para o fluxo da página ---
@@ -204,6 +203,28 @@ elif st.session_state.etapa == "configurar_envio":
 
     st.header("Passo 2: Configure e Envie os Dados")
 
+    # --- LÓGICA DE FILTRO AUTOMÁTICO ADICIONADA AQUI ---
+    termos_para_excluir = ['aut', 'mec', 'eja', 'ali', 'gas', 'eletrom']
+    regex_pattern = '|'.join(termos_para_excluir)
+
+    # Identifica as turmas a serem excluídas (ignorando maiúsculas/minúsculas)
+    mascara_exclusao = df_processado['TURMA'].str.contains(regex_pattern, case=False, na=False)
+    turmas_excluidas_auto = sorted(df_processado[mascara_exclusao]['TURMA'].unique())
+
+    # Cria o dataframe já com o filtro automático aplicado
+    df_filtrado_auto = df_processado[~mascara_exclusao]
+
+    # Informa ao usuário quais turmas foram filtradas automaticamente
+    if turmas_excluidas_auto:
+        st.info(f"**Filtro Automático:** As seguintes {len(turmas_excluidas_auto)} turmas foram removidas da seleção por conterem termos pré-definidos (como 'EJA', 'MEC', etc.):")
+        # Exibe as turmas em colunas para melhor visualização
+        num_cols = 3
+        cols = st.columns(num_cols)
+        for i, turma in enumerate(turmas_excluidas_auto):
+            cols[i % num_cols].write(f"- {turma}")
+    # --- FIM DA LÓGICA DE FILTRO AUTOMÁTICO ---
+
+
     creds = st.session_state.credentials
     dataset_id = st.session_state.dataset_id
     ultima_semana = get_latest_week(creds, dataset_id)
@@ -218,8 +239,9 @@ elif st.session_state.etapa == "configurar_envio":
             min_value=1, value=semana_sugerida, step=1
         )
 
-    st.markdown("#### Filtrar Turmas para Exclusão")
-    turmas_encontradas = sorted(df_processado['TURMA'].unique())
+    st.markdown("#### Filtrar Turmas Manualmente (Opcional)")
+    # A lista de turmas para o filtro manual agora vem do dataframe já filtrado
+    turmas_encontradas = sorted(df_filtrado_auto['TURMA'].unique())
 
     filtro_texto_turma = st.text_input(
         "Digite para filtrar a lista de turmas a excluir:",
@@ -231,20 +253,20 @@ elif st.session_state.etapa == "configurar_envio":
     else:
         opcoes_filtradas = turmas_encontradas
 
-    turmas_para_excluir = st.multiselect(
-        "Selecione as turmas que deseja EXCLUIR do envio:",
+    turmas_para_excluir_manual = st.multiselect(
+        "Selecione outras turmas que deseja EXCLUIR do envio:",
         options=opcoes_filtradas,
         default=[]
     )
 
-    df_filtrado = df_processado[~df_processado['TURMA'].isin(turmas_para_excluir)]
-    df_para_envio = df_filtrado.copy()
+    df_filtrado_manual = df_filtrado_auto[~df_filtrado_auto['TURMA'].isin(turmas_para_excluir_manual)]
+    df_para_envio = df_filtrado_manual.copy()
     df_para_envio['SEMANA'] = semana_para_envio
 
     st.markdown("---")
 
     if not df_para_envio.empty:
-        st.write(f"**{len(df_para_envio)}** registros prontos para serem enviados.")
+        st.write(f"**{len(df_para_envio)}** registros prontos para serem enviados (após filtros).")
 
         with st.expander("Clique para visualizar todos os dados a serem enviados"):
             st.dataframe(df_para_envio)
@@ -279,6 +301,8 @@ elif st.session_state.etapa == "sucesso":
     st.balloons()
 
     if st.button("Iniciar Novo Lançamento", use_container_width=True):
+        # Limpa o dataframe processado para evitar que dados antigos persistam
+        if 'df_processado' in st.session_state:
+            del st.session_state['df_processado']
         st.session_state.etapa = "upload"
-        st.session_state.df_processado = pd.DataFrame()
         st.rerun()
