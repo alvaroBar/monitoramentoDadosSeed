@@ -1,5 +1,5 @@
 # ==============================================================================
-# ARQUIVO DA PÁGINA: p2_Carga_Inicial.py
+# ARQUIVO DA PÁGINA: p3_Carga_Inicial.py
 # Melhorada a lógica de exibição do tempo estimado na barra de progresso.
 # ==============================================================================
 

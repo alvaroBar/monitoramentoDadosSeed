@@ -1,5 +1,5 @@
 # ==============================================================================
-# ARQUIVO DA PÁGINA: p5_Consultar_Dados.py
+# ARQUIVO DA PÁGINA: p6_Consultar_Dados.py
 # Removido o limite de 1000 linhas na consulta de dados.
 # ==============================================================================
 

@@ -1,5 +1,5 @@
 # ==============================================================================
-# ARQUIVO DA PÁGINA: p6_Auditoria_Comparativa.py
+# ARQUIVO DA PÁGINA: p7_Auditoria_Comparativa.py
 # Funcionalidade: Compara novos PDFs com dados históricos para gerar uma
 # lista de pendências (registros ainda nulos).
 # ==============================================================================
