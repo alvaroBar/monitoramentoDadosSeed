@@ -1,6 +1,7 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: p1_Extrair_Dados_PDF.py
-# CORRIGIDO: Lógica de extração da DATA_DO_RELATORIO foi aprimorada.
+# CORRIGIDO: Lógica de extração da DATA_DO_RELATORIO foi refeita para
+# funcionar com a estrutura real do PDF.
 # ==============================================================================
 
 import streamlit as st
@@ -24,7 +25,9 @@ def extrair_dados_de_pdf(arquivo_pdf, disciplinas_validas):
     # Variáveis são reiniciadas para cada arquivo
     nome_escola, municipio, data_relatorio = "N/A", "N/A", "N/A"
     turma_atual = None
-    data_ja_encontrada = False  # Flag para otimização
+
+    # Flags para garantir que os dados do cabeçalho sejam lidos apenas uma vez por arquivo
+    cabecalho_lido = False
 
     try:
         with pdfplumber.open(arquivo_pdf) as pdf:
@@ -34,20 +37,25 @@ def extrair_dados_de_pdf(arquivo_pdf, disciplinas_validas):
 
                 linhas = texto_pagina.split("\n")
 
-                # Procura os dados do cabeçalho em qualquer página, mas apenas uma vez
-                if not data_ja_encontrada:
+                # Procura os dados do cabeçalho (data, escola, município) apenas uma vez
+                if not cabecalho_lido:
+                    texto_completo_primeira_pagina = "\n".join(linhas)
+
+                    # Procura a data em qualquer lugar no início
+                    match_data = re.search(data_relatorio_re, texto_completo_primeira_pagina)
+                    if match_data:
+                        data_relatorio = match_data.group()
+
+                    # Procura escola e município com base em seu texto âncora
                     for idx, linha in enumerate(linhas):
-                        if "ESTADO DO PARANá" in linha.upper():
-                            match_data = re.search(data_relatorio_re, linha)
-                            if match_data:
-                                data_relatorio = match_data.group()
-                                data_ja_encontrada = True  # Evita buscas futuras no mesmo arquivo
                         if "SECRETARIA DE ESTADO DA EDUCAÇÃO" in linha.upper():
                             municipio_temp = linha.split("SECRETARIA")[0].strip()
                             if municipio_temp: municipio = municipio_temp
                             if idx + 1 < len(linhas):
                                 nome_escola_temp = linhas[idx + 1].strip()
                                 if nome_escola_temp: nome_escola = nome_escola_temp
+                            cabecalho_lido = True  # Marca que já processamos o cabeçalho
+                            break  # Para de procurar após encontrar
 
                 for linha in linhas:
                     linha = linha.strip()
