@@ -1,7 +1,7 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: p1_Processar_Relatorios_PDF.py
-# Adicionada uma etapa de confirmação do usuário após o processamento em 
-# modo de depuração para evitar que a tela seja limpa automaticamente.
+# Adicionada lógica de erro persistente para garantir que falhas críticas
+# sejam sempre exibidas ao usuário.
 # ==============================================================================
 
 import streamlit as st
@@ -16,7 +16,7 @@ from bigquery_loader import autenticar_usuario, get_latest_week, carregar_dados_
 
 
 # --- Funções de Apoio ---
-# (A função processar_pdfs e formatar_tempo permanecem inalteradas)
+# (As funções processar_pdfs e formatar_tempo permanecem inalteradas)
 def formatar_tempo(segundos):
     """Converte segundos em uma string formatada (minutos e segundos)."""
     mins, segs = divmod(segundos, 60)
@@ -179,8 +179,18 @@ if 'etapa' not in st.session_state:
 
 if st.session_state.etapa == "upload":
 
-    # --- LÓGICA DE CONTROLE DE FLUXO PÓS-DEBUG ---
-    # Se a depuração acabou de rodar, mostra esta tela de confirmação em vez do upload.
+    # --- LÓGICA DE ERRO PERSISTENTE ---
+    # Se um erro foi salvo na sessão, mostra ele e para a execução.
+    if 'processing_error' in st.session_state:
+        st.error("### Ocorreu um erro durante o processamento!")
+        st.error(st.session_state.processing_error)
+        if st.button("Tentar Novamente"):
+            # Limpa o erro da sessão e recarrega a página
+            del st.session_state.processing_error
+            st.rerun()
+        st.stop()
+    # --- FIM DA LÓGICA DE ERRO ---
+
     if st.session_state.get("debug_finalizado"):
         st.header("Resultado da Depuração")
         st.info("O processo de depuração foi concluído. Verifique as mensagens de erro (se houver) na tela.")
@@ -191,21 +201,16 @@ if st.session_state.etapa == "upload":
             st.success(f"Foram extraídos {len(df_processado)} registros com sucesso.")
             if st.button("Prosseguir para o Passo 2 (Configurar Envio)", use_container_width=True, type="primary"):
                 st.session_state.etapa = "configurar_envio"
-                del st.session_state.debug_finalizado  # Limpa o estado para o próximo ciclo
+                del st.session_state.debug_finalizado
                 st.rerun()
         else:
             st.warning("Nenhum registro válido foi extraído. Verifique os erros e tente novamente.")
             if st.button("Tentar Novo Processamento"):
-                # Limpa todos os estados relevantes para recomeçar
                 for key in ['df_processado', 'debug_finalizado']:
                     if key in st.session_state:
                         del st.session_state[key]
                 st.rerun()
-
-        # Impede que o restante da interface de upload seja desenhado
         st.stop()
-
-    # --- FIM DA LÓGICA DE CONTROLE ---
 
     st.header("Passo 1: Carregue os Arquivos")
 
@@ -220,6 +225,7 @@ if st.session_state.etapa == "upload":
 
     if uploaded_files and disciplinas_file:
         if st.button("Processar Arquivos PDF", use_container_width=True):
+            # --- BLOCO TRY/EXCEPT PRINCIPAL ATUALIZADO ---
             try:
                 disciplinas_df = pd.read_excel(disciplinas_file)
                 lista_disciplinas_validas = [str(d).strip().upper() for d in
@@ -231,27 +237,27 @@ if st.session_state.etapa == "upload":
                 df_temp = processar_pdfs(uploaded_files, lista_disciplinas_validas, progress_bar, status_text,
                                          debug_mode)
 
-                # --- LÓGICA DE AVANÇO CONDICIONAL ---
                 st.session_state.df_processado = df_temp
 
                 if debug_mode:
-                    # No modo de depuração, não avança. Apenas define um estado para
-                    # mostrar a tela de confirmação na próxima recarga.
                     st.session_state.debug_finalizado = True
                 else:
-                    # No modo normal, avança direto se houver dados.
                     if not df_temp.empty:
                         st.session_state.etapa = "configurar_envio"
                     else:
                         st.warning("Nenhum registro válido foi encontrado nos PDFs.")
-                        # Limpa o df_processado se estiver vazio para não confundir o estado
                         if 'df_processado' in st.session_state:
                             del st.session_state.df_processado
 
                 st.rerun()
 
             except Exception as e:
-                st.error(f"Ocorreu um erro geral durante o processamento: {e}")
+                # Em caso de erro, salva na sessão e limpa estados anteriores
+                st.session_state.processing_error = f"**Detalhes do Erro:**\n\n{e}"
+                for key in ['df_processado', 'debug_finalizado']:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                st.rerun()
 
 # --- ETAPA 2 e 3 (sem alterações) ---
 elif st.session_state.etapa == "configurar_envio":
