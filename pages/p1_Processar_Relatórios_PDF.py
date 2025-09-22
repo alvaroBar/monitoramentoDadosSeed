@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: p1_Processar_Relatorios_PDF.py
-# Implementado gerenciamento de memória explícito (gc.collect) e logging 
+# Implementado gerenciamento de memória explícito (gc.collect) e logging
 # persistente em arquivo para diagnosticar crashes silenciosos.
 # ==============================================================================
 
@@ -134,7 +134,7 @@ st.markdown("---")
 if uploaded_files and disciplinas_file:
     if st.button(f"Processar e Enviar {len(uploaded_files)} Arquivos para a Semana {semana_para_envio}",
                  use_container_width=True, type="primary"):
-        CHUNK_SIZE = 20
+        CHUNK_SIZE = 10
         try:
             logging.info("--- INICIANDO NOVO PROCESSAMENTO ---")
             disciplinas_df = pd.read_excel(disciplinas_file)
