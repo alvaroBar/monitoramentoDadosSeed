@@ -1,7 +1,6 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: p1_Processar_Relatorios_PDF.py
-# Otimizado o Modo de Depuração para exibir apenas as falhas e erros,
-# evitando a sobrecarga do Streamlit.
+# Otimizado o Modo de Depuração para exibir APENAS os erros críticos (exceptions).
 # ==============================================================================
 
 import streamlit as st
@@ -28,7 +27,7 @@ def formatar_tempo(segundos):
 def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, status_text, debug_mode=False):
     """
     Função principal que extrai os dados de uma lista de arquivos PDF,
-    com modo de depuração otimizado para reportar apenas falhas.
+    com modo de depuração focado apenas em erros críticos.
     """
     dados_extraidos = []
     total_arquivos = len(lista_de_arquivos_pdf)
@@ -44,7 +43,7 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, sta
     semana = 0
 
     if debug_mode:
-        st.info("O Modo de Depuração está ativo. Somente erros e falhas de processamento serão exibidos abaixo.")
+        st.info("O Modo de Depuração está ativo. Somente erros críticos que travariam a aplicação serão exibidos.")
 
     for i, arquivo_pdf in enumerate(lista_de_arquivos_pdf):
         progresso_atual = (i + 1) / total_arquivos
@@ -112,12 +111,10 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, sta
                                 disciplina_encontrada = nome_disciplina
                                 break
 
+                        # --- ALTERAÇÃO APLICADA AQUI ---
+                        # A verificação de falha lógica foi removida.
+                        # O programa agora simplesmente ignora a linha se não encontrar a disciplina, sem notificar.
                         if not disciplina_encontrada:
-                            if debug_mode:
-                                st.warning(
-                                    f"**DEBUG: FALHA LÓGICA** na linha `{line_num + 1}` (Pág. {page_num + 1}, Arquivo: `{arquivo_pdf.name}`).")
-                                st.warning(
-                                    f"--> **Motivo:** Disciplina não identificada no trecho: `{disciplina_raw}`.")
                             continue
 
                         dados_extraidos.append([
@@ -127,6 +124,7 @@ def processar_pdfs(lista_de_arquivos_pdf, disciplinas_validas, progress_bar, sta
                         ])
 
                     except Exception as e:
+                        # Este bloco continua ativo, mostrando os erros críticos quando o modo debug está ligado.
                         if debug_mode:
                             st.error(
                                 f"**DEBUG: ERRO CRÍTICO** ao processar a linha `{line_num + 1}` (Pág. {page_num + 1}, Arquivo: `{arquivo_pdf.name}`!). O programa não travou.")
@@ -185,8 +183,10 @@ if 'etapa' not in st.session_state:
 if st.session_state.etapa == "upload":
     st.header("Passo 1: Carregue os Arquivos")
 
+    # --- ALTERAÇÃO APLICADA AQUI ---
+    # O texto de ajuda foi atualizado para refletir o novo comportamento.
     debug_mode = st.checkbox("Ativar Modo de Depuração",
-                             help="Marque esta caixa para exibir apenas as falhas e erros encontrados durante o processamento dos PDFs.")
+                             help="Marque esta caixa para exibir apenas os erros críticos (falhas que travariam o programa) encontrados durante o processamento.")
 
     col1, col2 = st.columns(2)
     with col1:
