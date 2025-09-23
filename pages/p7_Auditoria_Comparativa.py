@@ -1,6 +1,7 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: p7_Auditoria_Comparativa.py
-# CORRIGIDO: Refeito para um fluxo de duas etapas para evitar estouro de memória O usuário agora usa a p1 para extrair e esta página para comparar.
+# CORRIGIDO: Seção de visualização agora é capaz de exibir tanto relatórios
+# com pendências quanto relatórios "limpos" (sem pendências).
 # ==============================================================================
 
 import streamlit as st
@@ -132,20 +133,28 @@ else:
         with st.spinner(f"A gerar resumo para a auditoria '{selected_table}'..."):
             audit_stats = get_analysis_audit_stats(creds, dataset_id, selected_table)
 
-        if audit_stats:
+        if not audit_stats:
+            st.warning("Não foi possível gerar o resumo para esta auditoria.")
+
+        # --- LÓGICA DE EXIBIÇÃO ATUALIZADA ---
+        elif audit_stats.get("type") == "clean":
+            st.subheader(f"Relatório da Auditoria '{selected_table}'")
+            st.success("🎉 Esta auditoria foi concluída sem nenhuma pendência encontrada.")
+            st.dataframe(audit_stats.get("data"), use_container_width=True, hide_index=True)
+
+        elif audit_stats.get("type") == "detailed":
             counts = audit_stats.get("counts", {})
             df_details = audit_stats.get("details", pd.DataFrame())
 
             st.subheader(f"Resumo das Pendências em '{selected_table}'")
-
             col1, col2, col3 = st.columns(3)
             col1.metric("Total de Registros Pendentes", f"{counts.get('total_registros', 0):,}".replace(",", "."))
             col2.metric("Aulas sem Registro", f"{counts.get('total_sem_aula', 0):,}".replace(",", "."))
             col3.metric("Conteúdos sem Registro", f"{counts.get('total_sem_conteudo', 0):,}".replace(",", "."))
 
             st.markdown("---")
-
             st.subheader("Detalhes das Pendências (por Escola, Disciplina e Turma)")
+
             if not df_details.empty:
                 csv_data = df_details.to_csv(index=False).encode('utf-8')
                 st.download_button(
@@ -157,6 +166,8 @@ else:
                 )
                 st.dataframe(df_details, use_container_width=True, hide_index=True)
             else:
+                # Este caso pode ocorrer se a tabela existir mas os detalhes estiverem vazios
                 st.success("🎉 Não foram encontrados registros com pendências nesta auditoria.")
+
         else:
-            st.warning("Não foi possível gerar o resumo para esta auditoria.")
+            st.warning("Formato de relatório de auditoria desconhecido.")
