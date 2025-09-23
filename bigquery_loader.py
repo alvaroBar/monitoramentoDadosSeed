@@ -140,55 +140,32 @@ def get_latest_week(creds, dataset_id):
 
 
 def carregar_dados_no_bigquery(df: pd.DataFrame, creds, dataset_id, mode='append', table_name='relatorios_lrco'):
-    """Carrega um DataFrame do Pandas para uma tabela especificada no BigQuery."""
     destination_table = f"{dataset_id}.{table_name}"
     try:
         df_limpo = preparar_dataframe_para_bigquery(df)
-        pandas_gbq.to_gbq(
-            df_limpo,
-            destination_table=destination_table,
-            project_id=PROJECT_ID,
-            credentials=creds,
-            if_exists=mode,
-            progress_bar=False
-        )
+        pandas_gbq.to_gbq(df_limpo, destination_table=destination_table, project_id=PROJECT_ID, credentials=creds, if_exists=mode, progress_bar=False)
         return True
     except Exception as e:
-        st.error(f"Erro ao carregar dados na tabela {destination_table}: {e}")
-        return False
+        st.error(f"Erro ao carregar dados na tabela {destination_table}: {e}"); return False
 
 
 def preparar_dataframe_para_bigquery(df: pd.DataFrame) -> pd.DataFrame:
-    """Prepara o DataFrame para ser carregado no BigQuery."""
     df_copy = df.copy()
-
     if 'SEMANA' in df_copy.columns:
         df_copy['SEMANA'] = pd.to_numeric(df_copy['SEMANA'], errors='coerce').fillna(0).astype(int)
-
-    cols_to_exclude_from_str_ops = ['SEMANA', 'DATA_DO_RELATORIO', 'REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO',
-                                    'HORARIO']
-
+    cols_to_exclude_from_str_ops = ['SEMANA', 'DATA_DO_RELATORIO', 'REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO', 'HORARIO']
     for col in df_copy.select_dtypes(include=['object']).columns:
         if col not in cols_to_exclude_from_str_ops:
-            df_copy[col] = df_copy[col].astype(str).str.strip().str.replace('\r', ' ', regex=False).str.replace('\n',
-                                                                                                                ' ',
-                                                                                                                regex=False)
-
+            df_copy[col] = df_copy[col].astype(str).str.strip().str.replace('\r', ' ', regex=False).str.replace('\n', ' ', regex=False)
     cols_to_replace = ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']
     for col in cols_to_replace:
         if col in df_copy.columns:
             df_copy[col] = pd.to_datetime(df_copy[col].astype(str).replace("Sem registro", ""), errors='coerce')
-
-    df_copy["DATA_DO_RELATORIO"] = pd.to_datetime(df_copy["DATA_DO_RELATORIO"], format='%d/%m/%Y',
-                                                  errors='coerce').dt.date
-    df_copy["REGISTRO_DE_AULA"] = pd.to_datetime(df_copy["REGISTRO_DE_AULA"], format='%d/%m/%Y %H:%M:%S',
-                                                 errors='coerce')
-    df_copy["REGISTRO_DE_CONTEUDO"] = pd.to_datetime(df_copy["REGISTRO_DE_CONTEUDO"], format='%d/%m/%Y %H:%M:%S',
-                                                     errors='coerce')
-
+    df_copy["DATA_DO_RELATORIO"] = pd.to_datetime(df_copy["DATA_DO_RELATORIO"], format='%d/%m/%Y', errors='coerce').dt.date
+    df_copy["REGISTRO_DE_AULA"] = pd.to_datetime(df_copy["REGISTRO_DE_AULA"], format='%d/%m/%Y %H:%M:%S', errors='coerce')
+    df_copy["REGISTRO_DE_CONTEUDO"] = pd.to_datetime(df_copy["REGISTRO_DE_CONTEUDO"], format='%d/%m/%Y %H:%M:%S', errors='coerce')
     if 'HORARIO' in df_copy.columns:
         df_copy['HORARIO'] = pd.to_datetime(df_copy['HORARIO'], format='%H:%M:%S', errors='coerce').dt.time
-
     return df_copy
 
 
@@ -340,18 +317,23 @@ def get_analysis_audit_stats(_creds, dataset_id, table_name):
             st.error(f"Não foi possível ler a tabela de auditoria '{table_name}': {e}"); return None
 
 
+# --- FUNÇÃO DE AUDITORIA COMPARATIVA ATUALIZADA ---
 def criar_analise_comparativa(creds, dataset_id, analysis_name, weeks_to_compare, df_from_parquet):
     clean_name = re.sub(r'\W+', '_', analysis_name).lower()
     if not clean_name: return False, "O nome da análise é inválido."
     destination_table_name = f"auditoria_{clean_name}"
 
+    # Função auxiliar para criar e carregar o relatório "limpo"
     def criar_e_carregar_relatorio_limpo(mensagem):
         df_sem_pendencias = pd.DataFrame([{'DATA_AUDITORIA': date.today(), 'STATUS': mensagem}])
-        sucesso_carga = carregar_dados_no_bigquery(df_sem_pendencias, creds, dataset_id, mode='replace',
-                                                   table_name=destination_table_name)
-        if sucesso_carga:
+        df_sem_pendencias['DATA_AUDITORIA'] = pd.to_datetime(df_sem_pendencias['DATA_AUDITORIA'])
+        destination_table = f"{dataset_id}.{destination_table_name}"
+        try:
+            pandas_gbq.to_gbq(df_sem_pendencias, destination_table, project_id=PROJECT_ID, credentials=creds,
+                              if_exists='replace')
             return True, f"Auditoria '{analysis_name}' concluída! Um relatório foi gerado em `{destination_table_name}` indicando que não há pendências."
-        else:
+        except Exception as e:
+            st.error(f"Erro ao carregar o relatório de auditoria limpo: {e}")
             return False, f"Falha ao carregar o relatório de auditoria sem pendências."
 
     try:
