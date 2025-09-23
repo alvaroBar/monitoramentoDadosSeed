@@ -1,7 +1,7 @@
 # ==============================================================================
 # ARQUIVO: bigquery_loader.py
-# CORRIGIDO: Bug na função preparar_dataframe_para_bigquery que causava o erro
-# "Can only use .str accessor with string values!".
+# CORRIGIDO: Re-adicionada a função `delete_week_data` que foi removida
+# acidentalmente, consertando a página de Manutenção de Dados.
 # ==============================================================================
 
 import streamlit as st
@@ -157,7 +157,6 @@ def carregar_dados_no_bigquery(df: pd.DataFrame, creds, dataset_id, mode='append
         return False
 
 
-# --- FUNÇÃO CORRIGIDA ---
 def preparar_dataframe_para_bigquery(df: pd.DataFrame) -> pd.DataFrame:
     """Prepara o DataFrame para ser carregado no BigQuery."""
     df_copy = df.copy()
@@ -165,26 +164,20 @@ def preparar_dataframe_para_bigquery(df: pd.DataFrame) -> pd.DataFrame:
     if 'SEMANA' in df_copy.columns:
         df_copy['SEMANA'] = pd.to_numeric(df_copy['SEMANA'], errors='coerce').fillna(0).astype(int)
 
-    # --- ALTERAÇÃO 1: Limpeza de texto mais específica ---
-    # Define colunas que não devem sofrer limpeza de texto
     cols_to_exclude_from_str_ops = ['SEMANA', 'DATA_DO_RELATORIO', 'REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO',
                                     'HORARIO']
 
     for col in df_copy.select_dtypes(include=['object']).columns:
-        # Aplica a limpeza apenas se a coluna não estiver na lista de exclusão
         if col not in cols_to_exclude_from_str_ops:
             df_copy[col] = df_copy[col].astype(str).str.strip().str.replace('\r', ' ', regex=False).str.replace('\n',
                                                                                                                 ' ',
                                                                                                                 regex=False)
 
-    # Substitui "Sem registro" por nulo (NaT)
     cols_to_replace = ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']
     for col in cols_to_replace:
         if col in df_copy.columns:
             df_copy[col] = pd.to_datetime(df_copy[col].astype(str).replace("Sem registro", ""), errors='coerce')
 
-    # --- ALTERAÇÃO 2: Conversão de datas mais robusta ---
-    # Converte as colunas para os tipos corretos, especificando o formato para evitar avisos
     df_copy["DATA_DO_RELATORIO"] = pd.to_datetime(df_copy["DATA_DO_RELATORIO"], format='%d/%m/%Y',
                                                   errors='coerce').dt.date
     df_copy["REGISTRO_DE_AULA"] = pd.to_datetime(df_copy["REGISTRO_DE_AULA"], format='%d/%m/%Y %H:%M:%S',
@@ -206,6 +199,22 @@ def get_available_weeks(creds, dataset_id):
         return [week for week in df['SEMANA'].tolist() if week is not None]
     except Exception:
         return []
+
+
+# --- FUNÇÃO RE-ADICIONADA ---
+def delete_week_data(creds, dataset_id, week_to_delete):
+    """Apaga os registros de uma semana específica da tabela histórica."""
+    try:
+        client = bigquery.Client(credentials=creds, project=PROJECT_ID)
+        table_ref = f"`{PROJECT_ID}.{dataset_id}.relatorios_lrco`"
+        delete_query = f"DELETE FROM {table_ref} WHERE SEMANA = {week_to_delete}"
+
+        query_job = client.query(delete_query)
+        query_job.result()  # Aguarda a conclusão do trabalho
+
+        return True, f"Registros da semana {week_to_delete} apagados com sucesso."
+    except Exception as e:
+        return False, f"Erro ao apagar os dados da semana: {e}"
 
 
 def list_analysis_tables(creds, dataset_id):
