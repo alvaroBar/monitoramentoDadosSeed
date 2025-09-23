@@ -1,6 +1,7 @@
 # ==============================================================================
 # ARQUIVO: bigquery_loader.py
-# CORRIGIDO: Bug na função criar_analise_comparativa que causava o erro "'bool' object has no attribute 'to_numpy'".
+# CORRIGIDO: Bug na função preparar_dataframe_para_bigquery que causava o erro
+# "'bool' object has no attribute 'to_numpy'" ao usar o método replace().
 # ==============================================================================
 
 import streamlit as st
@@ -156,6 +157,7 @@ def carregar_dados_no_bigquery(df: pd.DataFrame, creds, dataset_id, mode='append
         return False
 
 
+# --- FUNÇÃO CORRIGIDA ---
 def preparar_dataframe_para_bigquery(df: pd.DataFrame) -> pd.DataFrame:
     """Prepara o DataFrame para ser carregado no BigQuery."""
     df_copy = df.copy()
@@ -168,14 +170,20 @@ def preparar_dataframe_para_bigquery(df: pd.DataFrame) -> pd.DataFrame:
             df_copy[col] = df_copy[col].str.strip().str.replace('\r', ' ', regex=False).str.replace('\n', ' ',
                                                                                                     regex=False)
 
-    df_copy.replace("Sem registro", pd.NaT, inplace=True)
+    # --- ALTERAÇÃO APLICADA AQUI ---
+    # A substituição agora é feita de forma direcionada, apenas nas colunas
+    # relevantes, para evitar conflitos de tipo de dado.
+    cols_to_replace = ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']
+    for col in cols_to_replace:
+        if col in df_copy.columns:
+            # Garante que a coluna seja tratada como texto antes do replace
+            df_copy[col] = df_copy[col].astype(str).replace("Sem registro", pd.NaT)
 
     df_copy["DATA_DO_RELATORIO"] = pd.to_datetime(df_copy["DATA_DO_RELATORIO"], format='%d/%m/%Y',
                                                   errors='coerce').dt.date
-    df_copy["REGISTRO_DE_AULA"] = pd.to_datetime(df_copy["REGISTRO_DE_AULA"], format='%d/%m/%Y %H:%M:%S',
-                                                 errors='coerce')
-    df_copy["REGISTRO_DE_CONTEUDO"] = pd.to_datetime(df_copy["REGISTRO_DE_CONTEUDO"], format='%d/%m/%Y %H:%M:%S',
-                                                     errors='coerce')
+    df_copy["REGISTRO_DE_AULA"] = pd.to_datetime(df_copy["REGISTRO_DE_AULA"], errors='coerce')
+    df_copy["REGISTRO_DE_CONTEUDO"] = pd.to_datetime(df_copy["REGISTRO_DE_CONTEUDO"], errors='coerce')
+
     if 'HORARIO' in df_copy.columns:
         df_copy['HORARIO'] = pd.to_datetime(df_copy['HORARIO'], format='%H:%M:%S', errors='coerce').dt.time
 
@@ -250,7 +258,6 @@ def get_analysis_audit_stats(_creds, dataset_id, table_name):
         return None
 
 
-# --- FUNÇÃO DE AUDITORIA COMPARATIVA CORRIGIDA ---
 def criar_analise_comparativa(creds, dataset_id, analysis_name, weeks_to_compare, df_from_parquet):
     """
     Compara dados de um arquivo Parquet com pendências históricas do BigQuery.
@@ -262,7 +269,6 @@ def criar_analise_comparativa(creds, dataset_id, analysis_name, weeks_to_compare
     destination_table_name = f"auditoria_{clean_name}"
 
     try:
-        # 1. Buscar do BQ APENAS os registros PENDENTES das semanas selecionadas
         st.write("Passo A: Buscando pendências históricas no BigQuery...")
         weeks_str = ','.join(map(str, weeks_to_compare))
         query_pendentes = f"""
@@ -276,14 +282,12 @@ def criar_analise_comparativa(creds, dataset_id, analysis_name, weeks_to_compare
         if df_historico_pendente.empty:
             return True, "Parabéns! Não havia pendências nos dados históricos para as semanas selecionadas."
 
-        # 2. Preparar ambos os DataFrames
         st.write("Passo B: Preparando dados para comparação...")
         df_novo_preparado = preparar_dataframe_para_bigquery(df_from_parquet)
         df_historico_preparado = preparar_dataframe_para_bigquery(df_historico_pendente)
 
         key_cols = ['DATA_DO_RELATORIO', 'ESCOLA', 'TURMA', 'HORARIO', 'DISCIPLINA']
 
-        # 3. Cruzar as pendências históricas com os novos dados de forma robusta
         st.write("Passo C: Cruzando dados e identificando o que ainda está pendente...")
         df_merged = pd.merge(
             df_historico_preparado,
@@ -295,15 +299,12 @@ def criar_analise_comparativa(creds, dataset_id, analysis_name, weeks_to_compare
             how='left'
         )
 
-        # 4. Filtrar para encontrar os que AINDA estão com pendências (verificando as novas colunas)
         mascara_ainda_pendente = pd.isna(df_merged['NOVO_REGISTRO_AULA']) | pd.isna(df_merged['NOVO_REGISTRO_CONTEUDO'])
         df_resultado_final = df_merged[mascara_ainda_pendente]
 
-        # 5. Selecionar apenas as colunas originais para salvar no resultado
         colunas_originais = df_historico_preparado.columns.tolist()
         df_para_salvar = df_resultado_final[colunas_originais]
 
-        # 6. Se houver pendências, carregar para uma nova tabela
         if not df_para_salvar.empty:
             st.write(
                 f"Passo D: Encontradas {len(df_para_salvar)} pendências restantes. Carregando para a tabela `{destination_table_name}`...")
@@ -320,7 +321,6 @@ def criar_analise_comparativa(creds, dataset_id, analysis_name, weeks_to_compare
             return True, "Auditoria concluída com sucesso! Todas as pendências anteriores foram resolvidas nos novos arquivos."
 
     except Exception as e:
-        # Adiciona o traceback ao erro para facilitar a depuração
         import traceback
         st.error(traceback.format_exc())
         return False, f"Erro ao criar a análise comparativa: {e}"
