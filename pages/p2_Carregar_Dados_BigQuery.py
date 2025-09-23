@@ -1,7 +1,6 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: p2_Carregar_Dados_BigQuery.py
-# CORRIGIDO: Lógica de filtro específico alterada de "correspondência exata"
-# para "começa com" para abranger as variações nos nomes das turmas.
+# CORRIGIDO: Adicionada mais uma turma específica à lista de exclusão.
 # ==============================================================================
 
 import streamlit as st
@@ -59,24 +58,26 @@ if uploaded_parquet:
     regex_pattern = '|'.join(termos_para_excluir)
     mascara_keywords = df_para_envio['TURMA'].str.contains(regex_pattern, case=False, na=False)
 
-    # Filtro 2: Por combinação específica de Turma e Escola
-    # A lógica agora verifica se a TURMA "começa com" o texto fornecido.
+    # Filtro 2: Por combinação específica de prefixo da Turma e nome exato da Escola
     turmas_escolas_excluir = [
         ('6º Ano - Integral - D', 'ANTONIO M CERETTA, C E-EF M PROFIS'),
         ('3ª Série - Noite - E - ENSINO MEDIO', 'ARTHUR C E SILVA, C E PRES-EF M'),
         ('3ª Série - Noite - C - ENSINO MEDIO', 'ARTHUR C E SILVA, C E PRES-EF M')
     ]
-
     mascara_especifica = pd.Series([False] * len(df_para_envio), index=df_para_envio.index)
-
     for turma_prefixo, escola in turmas_escolas_excluir:
-        # --- ALTERAÇÃO PRINCIPAL AQUI ---
-        # Trocado '==' por '.str.startswith()' para uma correspondência mais flexível
         mascara_especifica |= (df_para_envio['TURMA'].str.startswith(turma_prefixo, na=False)) & (
                     df_para_envio['ESCOLA'] == escola)
 
-    # Combina as duas máscaras de exclusão
-    mascara_total_exclusao = mascara_keywords | mascara_especifica
+    # --- ALTERAÇÃO APLICADA AQUI ---
+    # Filtro 3: Por nome exato da Turma, independentemente da escola
+    turmas_exatas_excluir = [
+        'Sem Seriação - Tarde - A - PROGRAMA ATIVIDADE COMPLEMENTAR CONTRATURNO PERIODICA'
+    ]
+    mascara_exata = df_para_envio['TURMA'].isin(turmas_exatas_excluir)
+
+    # Combina todas as máscaras de exclusão
+    mascara_total_exclusao = mascara_keywords | mascara_especifica | mascara_exata
 
     df_filtrado = df_para_envio[~mascara_total_exclusao]
 
