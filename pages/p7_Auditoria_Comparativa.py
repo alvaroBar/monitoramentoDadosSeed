@@ -1,11 +1,11 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: p7_Auditoria_Comparativa.py
-# Funcionalidade: Compara novos PDFs com dados históricos para gerar uma
-# lista de pendências (registros ainda nulos).
+# CORRIGIDO: Importa e utiliza a função de extração de PDF correta da página p1.
 # ==============================================================================
 
 import streamlit as st
 import pandas as pd
+import gc
 from streamlit_autorefresh import st_autorefresh
 
 # Importa as funções necessárias
@@ -16,8 +16,8 @@ from bigquery_loader import (
     list_analysis_tables,
     get_analysis_audit_stats
 )
-# Importa a função de processamento de PDF da página 1
-from pages.p1_Processar_Relatórios_PDF import processar_pdfs
+# Importa a função de processamento de PDF da página correta
+from pages.p1_Extrair_Dados_PDF import extrair_dados_de_pdf
 
 st.set_page_config(layout="wide")
 st.title("Auditoria Comparativa de Pendências 🔍")
@@ -51,7 +51,6 @@ with st.sidebar:
         st.session_state.clear()
         st.rerun()
 
-# --- Keep-alive da sessão ---
 st_autorefresh(interval=5 * 60 * 1000, key="session_refresher_auditoria")
 
 creds = st.session_state.credentials
@@ -116,24 +115,25 @@ with st.expander("➕ Gerar Nova Auditoria de Pendências", expanded=True):
             with st.spinner("Iniciando processo de auditoria... Isso pode levar alguns minutos."):
                 try:
                     # 1. Processar os PDFs para extrair os dados atualizados
-                    st.write("Passo 1/4: Lendo e processando arquivos PDF...")
+                    st.write("Passo 1/3: Lendo e processando arquivos PDF...")
                     disciplinas_df = pd.read_excel(disciplinas_file)
                     lista_disciplinas_validas = [str(d).strip().upper() for d in
                                                  disciplinas_df.iloc[:, 0].dropna().unique()]
 
-                    progress_bar = st.progress(0, text="Processando PDFs...")
-                    status_text = st.empty()
-                    df_dos_pdfs = processar_pdfs(uploaded_files, lista_disciplinas_validas, progress_bar, status_text)
+                    all_dfs = [extrair_dados_de_pdf(file, lista_disciplinas_validas) for file in uploaded_files]
+                    df_dos_pdfs = pd.concat(all_dfs, ignore_index=True)
+                    del all_dfs
+                    gc.collect()
 
                     if df_dos_pdfs.empty:
                         st.error("Nenhum dado válido foi extraído dos PDFs. Verifique os arquivos.")
                     else:
-                        st.write("Passo 2/4: PDFs processados com sucesso!")
+                        st.write("Passo 2/3: PDFs processados com sucesso!")
                         # 2. Chamar a função principal de comparação
-                        st.write("Passo 3/4: Comparando com o BigQuery e gerando a tabela de pendências...")
-                        sucesso, mensagem = criar_analise_comparativa(creds, dataset_id, analysis_name, selected_weeks, df_dos_pdfs)
+                        sucesso, mensagem = criar_analise_comparativa(creds, dataset_id, analysis_name, selected_weeks,
+                                                                      df_dos_pdfs)
 
-                        st.write("Passo 4/4: Finalizado!")
+                        st.write("Passo 3/3: Finalizado!")
                         if sucesso:
                             st.success(mensagem)
                             st.balloons()
@@ -149,14 +149,11 @@ st.header("Visualizar Auditorias Salvas")
 
 with st.spinner("A buscar auditorias existentes..."):
     analysis_tables = list_analysis_tables(creds, dataset_id)
-    # Filtra para mostrar apenas as tabelas de auditoria
-    audit_tables = sorted([t for t in analysis_tables if t.startswith('auditoria_')])
 
-
-if not audit_tables:
+if not analysis_tables:
     st.info("Ainda não há nenhuma auditoria criada. Gere uma acima para começar.")
 else:
-    table_options = ["Selecione uma auditoria para visualizar..."] + audit_tables
+    table_options = ["Selecione uma auditoria para visualizar..."] + sorted(analysis_tables)
     selected_table = st.selectbox("Auditorias Disponíveis:", options=table_options)
 
     if selected_table != "Selecione uma auditoria para visualizar...":
