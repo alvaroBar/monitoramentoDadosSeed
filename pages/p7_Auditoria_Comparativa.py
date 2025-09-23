@@ -1,11 +1,10 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: p7_Auditoria_Comparativa.py
-# CORRIGIDO: Importa e utiliza a função de extração de PDF correta da página p1.
+# CORRIGIDO: Refeito para um fluxo de duas etapas para evitar estouro de memória O usuário agora usa a p1 para extrair e esta página para comparar.
 # ==============================================================================
 
 import streamlit as st
 import pandas as pd
-import gc
 from streamlit_autorefresh import st_autorefresh
 
 # Importa as funções necessárias
@@ -16,8 +15,6 @@ from bigquery_loader import (
     list_analysis_tables,
     get_analysis_audit_stats
 )
-# Importa a função de processamento de PDF da página correta
-from pages.p1_Extrair_Dados_PDF import extrair_dados_de_pdf
 
 st.set_page_config(layout="wide")
 st.title("Auditoria Comparativa de Pendências 🔍")
@@ -57,83 +54,58 @@ creds = st.session_state.credentials
 dataset_id = st.session_state.dataset_id
 
 st.info(
-    "Esta ferramenta compara relatórios PDF atualizados com os dados históricos no BigQuery. "
-    "Ela gera uma nova tabela contendo apenas os registros que **ainda possuem pendências** (aula ou conteúdo sem registro), "
-    "facilitando a cobrança."
+    "**Fluxo de Trabalho de Auditoria:**\n\n"
+    "1. **Vá para a página `p1_Extrair_Dados_PDF`:** Processe os novos relatórios PDF e baixe o arquivo `dados_extraidos.parquet`.\n\n"
+    "2. **Volte para esta página:** Faça o upload do arquivo `.parquet` que você acabou de baixar, selecione as semanas e gere o relatório de pendências."
 )
 
 st.markdown("---")
 
 # --- Secção 1: Criar uma Auditoria Comparativa ---
 with st.expander("➕ Gerar Nova Auditoria de Pendências", expanded=True):
-    with st.form("audit_form"):
-        analysis_name = st.text_input(
-            "Nome da Auditoria (ex: Verificação Bimestral Setembro)",
-            placeholder="Digite um nome claro e descritivo"
+    analysis_name = st.text_input(
+        "1. Dê um nome para a Auditoria (ex: Verificação Semanas 30-35)",
+        placeholder="Digite um nome claro e descritivo"
+    )
+
+    uploaded_parquet = st.file_uploader(
+        "2. Carregue o arquivo `dados_extraidos.parquet` com os dados atualizados",
+        type=["parquet"]
+    )
+
+    st.write("3. Selecione as semanas no banco de dados que correspondem a estes relatórios.")
+    with st.spinner("A carregar semanas disponíveis..."):
+        available_weeks = get_available_weeks(creds, dataset_id)
+
+    if not available_weeks:
+        st.warning("Não há semanas disponíveis no histórico para comparar.")
+        selected_weeks = []
+    else:
+        selected_weeks = st.multiselect(
+            "Semanas do histórico para comparar:",
+            options=available_weeks
         )
 
-        st.write("Faça o upload dos arquivos PDF **atualizados** que você baixou do sistema.")
-        col1, col2 = st.columns(2)
-        with col1:
-            uploaded_files = st.file_uploader(
-                "1. Selecione os relatórios PDF atualizados",
-                type="pdf",
-                accept_multiple_files=True
-            )
-        with col2:
-            disciplinas_file = st.file_uploader(
-                "2. Selecione a planilha de disciplinas",
-                type=["xlsx"]
-            )
+    st.markdown("---")
 
-        st.write("Selecione as semanas no banco de dados que correspondem a estes relatórios.")
-        with st.spinner("A carregar semanas disponíveis..."):
-            available_weeks = get_available_weeks(creds, dataset_id)
-
-        if not available_weeks:
-            st.warning("Não há semanas disponíveis no histórico para comparar.")
-            selected_weeks = []
-        else:
-            selected_weeks = st.multiselect(
-                "3. Selecione as semanas do histórico para comparar:",
-                options=available_weeks
-            )
-
-        submit_button = st.form_submit_button("Gerar Relatório de Pendências", use_container_width=True, type="primary")
-
-    if submit_button:
+    if st.button("Gerar Relatório de Pendências", use_container_width=True, type="primary"):
         # Validação dos inputs
         if not analysis_name:
             st.error("Por favor, forneça um nome para a auditoria.")
-        elif not uploaded_files:
-            st.error("Por favor, carregue pelo menos um arquivo PDF.")
-        elif not disciplinas_file:
-            st.error("Por favor, carregue a planilha de disciplinas.")
+        elif not uploaded_parquet:
+            st.error("Por favor, carregue o arquivo .parquet gerado na página de extração.")
         elif not selected_weeks:
             st.error("Por favor, selecione pelo menos uma semana para comparar.")
         else:
-            with st.spinner("Iniciando processo de auditoria... Isso pode levar alguns minutos."):
+            with st.spinner("Iniciando processo de auditoria..."):
                 try:
-                    # 1. Processar os PDFs para extrair os dados atualizados
-                    st.write("Passo 1/3: Lendo e processando arquivos PDF...")
-                    disciplinas_df = pd.read_excel(disciplinas_file)
-                    lista_disciplinas_validas = [str(d).strip().upper() for d in
-                                                 disciplinas_df.iloc[:, 0].dropna().unique()]
+                    df_from_parquet = pd.read_parquet(uploaded_parquet)
 
-                    all_dfs = [extrair_dados_de_pdf(file, lista_disciplinas_validas) for file in uploaded_files]
-                    df_dos_pdfs = pd.concat(all_dfs, ignore_index=True)
-                    del all_dfs
-                    gc.collect()
-
-                    if df_dos_pdfs.empty:
-                        st.error("Nenhum dado válido foi extraído dos PDFs. Verifique os arquivos.")
+                    if df_from_parquet.empty:
+                        st.error("O arquivo Parquet está vazio ou corrompido.")
                     else:
-                        st.write("Passo 2/3: PDFs processados com sucesso!")
-                        # 2. Chamar a função principal de comparação
                         sucesso, mensagem = criar_analise_comparativa(creds, dataset_id, analysis_name, selected_weeks,
-                                                                      df_dos_pdfs)
-
-                        st.write("Passo 3/3: Finalizado!")
+                                                                      df_from_parquet)
                         if sucesso:
                             st.success(mensagem)
                             st.balloons()
@@ -173,7 +145,7 @@ else:
 
             st.markdown("---")
 
-            st.subheader("Detalhes das Pendências (por Escola e Disciplina)")
+            st.subheader("Detalhes das Pendências (por Escola, Disciplina e Turma)")
             if not df_details.empty:
                 csv_data = df_details.to_csv(index=False).encode('utf-8')
                 st.download_button(
@@ -183,7 +155,7 @@ else:
                     mime="text/csv",
                     use_container_width=True
                 )
-                st.dataframe(df_details, use_container_width=True)
+                st.dataframe(df_details, use_container_width=True, hide_index=True)
             else:
                 st.success("🎉 Não foram encontrados registros com pendências nesta auditoria.")
         else:

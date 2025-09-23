@@ -1,7 +1,6 @@
 # ==============================================================================
 # ARQUIVO: bigquery_loader.py
-# CORRIGIDO: Função criar_analise_comparativa refeita para seguir a nova
-# lógica de auditoria de pendências.
+# CORRIGIDO: Função criar_analise_comparativa refeita para seguir a nova lógica de auditoria de pendências.
 # ==============================================================================
 
 import streamlit as st
@@ -149,7 +148,7 @@ def carregar_dados_no_bigquery(df: pd.DataFrame, creds, dataset_id, mode='append
             project_id=PROJECT_ID,
             credentials=creds,
             if_exists=mode,
-            progress_bar=False  # Desativado para evitar logs excessivos
+            progress_bar=False
         )
         return True
     except Exception as e:
@@ -193,21 +192,6 @@ def get_available_weeks(creds, dataset_id):
         return []
 
 
-def get_all_data_from_bq(creds, dataset_id, week_filter=None):
-    """Busca dados da tabela histórica, com um filtro opcional por semana."""
-    table_ref = f"`{PROJECT_ID}.{dataset_id}.relatorios_lrco`"
-    sql_query = f"SELECT * FROM {table_ref}"
-
-    if week_filter:
-        sql_query += f" WHERE SEMANA IN ({','.join(map(str, week_filter))})"
-
-    try:
-        df = pandas_gbq.read_gbq(sql_query, project_id=PROJECT_ID, credentials=creds)
-        return df
-    except Exception:
-        return pd.DataFrame()
-
-
 def list_analysis_tables(creds, dataset_id):
     """Lista todas as tabelas de análise (que começam com 'auditoria_') em um dataset."""
     try:
@@ -245,12 +229,13 @@ def get_analysis_audit_stats(_creds, dataset_id, table_name):
             SELECT
                 ESCOLA,
                 DISCIPLINA,
+                TURMA,
                 COUNTIF(REGISTRO_DE_AULA IS NULL) AS aulas_faltantes,
                 COUNTIF(REGISTRO_DE_CONTEUDO IS NULL) AS conteudos_faltantes
             FROM {table_ref}
-            GROUP BY ESCOLA, DISCIPLINA
+            GROUP BY ESCOLA, DISCIPLINA, TURMA
             HAVING aulas_faltantes > 0 OR conteudos_faltantes > 0
-            ORDER BY aulas_faltantes DESC, conteudos_faltantes DESC
+            ORDER BY ESCOLA, DISCIPLINA, TURMA
         """
         df_details = pandas_gbq.read_gbq(details_query, project_id=PROJECT_ID, credentials=_creds)
 
@@ -266,9 +251,9 @@ def get_analysis_audit_stats(_creds, dataset_id, table_name):
 
 
 # --- FUNÇÃO DE AUDITORIA COMPARATIVA REFEITA ---
-def criar_analise_comparativa(creds, dataset_id, analysis_name, weeks_to_compare, df_from_pdfs):
+def criar_analise_comparativa(creds, dataset_id, analysis_name, weeks_to_compare, df_from_parquet):
     """
-    Compara dados de PDFs com pendências históricas do BigQuery para encontrar o que ainda está pendente.
+    Compara dados de um arquivo Parquet com pendências históricas do BigQuery.
     """
     clean_name = re.sub(r'\W+', '_', analysis_name).lower()
     if not clean_name:
@@ -293,44 +278,39 @@ def criar_analise_comparativa(creds, dataset_id, analysis_name, weeks_to_compare
 
         # 2. Preparar ambos os DataFrames
         st.write("Passo B: Preparando dados para comparação...")
-        df_novo_preparado = preparar_dataframe_para_bigquery(df_from_pdfs)
+        df_novo_preparado = preparar_dataframe_para_bigquery(df_from_parquet)
         df_historico_preparado = preparar_dataframe_para_bigquery(df_historico_pendente)
 
-        # Chave de identificação única para cada aula
         key_cols = ['DATA_DO_RELATORIO', 'ESCOLA', 'TURMA', 'HORARIO', 'DISCIPLINA']
 
         # 3. Cruzar as pendências históricas com os novos dados
         st.write("Passo C: Cruzando dados e identificando o que ainda está pendente...")
         df_merged = pd.merge(
-            df_historico_preparado,
-            df_novo_preparado.rename(columns={
-                'REGISTRO_DE_AULA': 'NOVO_REGISTRO_AULA',
-                'REGISTRO_DE_CONTEUDO': 'NOVO_REGISTRO_CONTEUDO'
-            }),
+            df_historico_preparado[key_cols],  # Usamos apenas as chaves do que estava pendente
+            df_novo_preparado,
             on=key_cols,
-            how='left'
+            how='left'  # Traz os novos registros correspondentes para as pendências antigas
         )
 
-        # 4. Filtrar para encontrar os que AINDA estão com pendências
+        # 4. Filtrar para encontrar os que AINDA estão com pendências no novo arquivo
         df_ainda_pendente = df_merged[
-            df_merged['NOVO_REGISTRO_AULA'].isnull() |
-            df_merged['NOVO_REGISTRO_CONTEUDO'].isnull()
+            pd.isna(df_merged['REGISTRO_DE_AULA']) |
+            pd.isna(df_merged['REGISTRO_DE_CONTEUDO'])
             ].copy()
 
-        # 5. Selecionar e renomear colunas para o resultado final
-        colunas_finais = key_cols + ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']
-        df_resultado = df_ainda_pendente[colunas_finais]
-
-        # 6. Se houver pendências, carregar para uma nova tabela
-        if not df_resultado.empty:
+        # 5. Se houver pendências, carregar para uma nova tabela
+        if not df_ainda_pendente.empty:
             st.write(
-                f"Passo D: Encontradas {len(df_resultado)} pendências restantes. Carregando para a tabela `{destination_table_name}`...")
+                f"Passo D: Encontradas {len(df_ainda_pendente)} pendências restantes. Carregando para a tabela `{destination_table_name}`...")
+            # Adiciona a coluna SEMANA para consistência
+            df_ainda_pendente['SEMANA'] = 0  # Auditoria não é vinculada a uma semana específica
+
             sucesso_carga = carregar_dados_no_bigquery(
-                df_resultado, creds, dataset_id,
+                df_ainda_pendente, creds, dataset_id,
                 mode='replace', table_name=destination_table_name
             )
             if sucesso_carga:
-                return True, f"Auditoria '{analysis_name}' concluída! Uma nova tabela `{destination_table_name}` foi criada com {len(df_resultado)} pendências."
+                return True, f"Auditoria '{analysis_name}' concluída! Uma nova tabela `{destination_table_name}` foi criada com {len(df_ainda_pendente)} pendências."
             else:
                 return False, f"Falha ao carregar a tabela de resultados `{destination_table_name}` no BigQuery."
         else:
