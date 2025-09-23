@@ -1,7 +1,7 @@
 # ==============================================================================
 # ARQUIVO: bigquery_loader.py
-# CORRIGIDO: Bug na função criar_analise_comparativa que causava o erro
-# "KeyError: ['MUNICIPIO'] not in index".
+# CORRIGIDO: Bug na função preparar_dataframe_para_bigquery que causava o erro
+# "Can only use .str accessor with string values!".
 # ==============================================================================
 
 import streamlit as st
@@ -157,6 +157,7 @@ def carregar_dados_no_bigquery(df: pd.DataFrame, creds, dataset_id, mode='append
         return False
 
 
+# --- FUNÇÃO CORRIGIDA ---
 def preparar_dataframe_para_bigquery(df: pd.DataFrame) -> pd.DataFrame:
     """Prepara o DataFrame para ser carregado no BigQuery."""
     df_copy = df.copy()
@@ -164,20 +165,32 @@ def preparar_dataframe_para_bigquery(df: pd.DataFrame) -> pd.DataFrame:
     if 'SEMANA' in df_copy.columns:
         df_copy['SEMANA'] = pd.to_numeric(df_copy['SEMANA'], errors='coerce').fillna(0).astype(int)
 
-    for col in df_copy.select_dtypes(include=['object']).columns:
-        if col != 'SEMANA':
-            df_copy[col] = df_copy[col].str.strip().str.replace('\r', ' ', regex=False).str.replace('\n', ' ',
-                                                                                                    regex=False)
+    # --- ALTERAÇÃO 1: Limpeza de texto mais específica ---
+    # Define colunas que não devem sofrer limpeza de texto
+    cols_to_exclude_from_str_ops = ['SEMANA', 'DATA_DO_RELATORIO', 'REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO',
+                                    'HORARIO']
 
+    for col in df_copy.select_dtypes(include=['object']).columns:
+        # Aplica a limpeza apenas se a coluna não estiver na lista de exclusão
+        if col not in cols_to_exclude_from_str_ops:
+            df_copy[col] = df_copy[col].astype(str).str.strip().str.replace('\r', ' ', regex=False).str.replace('\n',
+                                                                                                                ' ',
+                                                                                                                regex=False)
+
+    # Substitui "Sem registro" por nulo (NaT)
     cols_to_replace = ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']
     for col in cols_to_replace:
         if col in df_copy.columns:
-            df_copy[col] = df_copy[col].astype(str).replace("Sem registro", pd.NaT)
+            df_copy[col] = pd.to_datetime(df_copy[col].astype(str).replace("Sem registro", ""), errors='coerce')
 
+    # --- ALTERAÇÃO 2: Conversão de datas mais robusta ---
+    # Converte as colunas para os tipos corretos, especificando o formato para evitar avisos
     df_copy["DATA_DO_RELATORIO"] = pd.to_datetime(df_copy["DATA_DO_RELATORIO"], format='%d/%m/%Y',
                                                   errors='coerce').dt.date
-    df_copy["REGISTRO_DE_AULA"] = pd.to_datetime(df_copy["REGISTRO_DE_AULA"], errors='coerce')
-    df_copy["REGISTRO_DE_CONTEUDO"] = pd.to_datetime(df_copy["REGISTRO_DE_CONTEUDO"], errors='coerce')
+    df_copy["REGISTRO_DE_AULA"] = pd.to_datetime(df_copy["REGISTRO_DE_AULA"], format='%d/%m/%Y %H:%M:%S',
+                                                 errors='coerce')
+    df_copy["REGISTRO_DE_CONTEUDO"] = pd.to_datetime(df_copy["REGISTRO_DE_CONTEUDO"], format='%d/%m/%Y %H:%M:%S',
+                                                     errors='coerce')
 
     if 'HORARIO' in df_copy.columns:
         df_copy['HORARIO'] = pd.to_datetime(df_copy['HORARIO'], format='%H:%M:%S', errors='coerce').dt.time
@@ -253,7 +266,6 @@ def get_analysis_audit_stats(_creds, dataset_id, table_name):
         return None
 
 
-# --- FUNÇÃO DE AUDITORIA COMPARATIVA CORRIGIDA ---
 def criar_analise_comparativa(creds, dataset_id, analysis_name, weeks_to_compare, df_from_parquet):
     """
     Compara dados de um arquivo Parquet com pendências históricas do BigQuery.
@@ -282,8 +294,6 @@ def criar_analise_comparativa(creds, dataset_id, analysis_name, weeks_to_compare
         df_novo_preparado = preparar_dataframe_para_bigquery(df_from_parquet)
         df_historico_preparado = preparar_dataframe_para_bigquery(df_historico_pendente)
 
-        # --- ALTERAÇÃO APLICADA AQUI ---
-        # Adicionado 'MUNICIPIO' à chave de ligação para evitar o erro.
         key_cols = ['DATA_DO_RELATORIO', 'MUNICIPIO', 'ESCOLA', 'TURMA', 'HORARIO', 'DISCIPLINA']
 
         st.write("Passo C: Cruzando dados e identificando o que ainda está pendente...")
