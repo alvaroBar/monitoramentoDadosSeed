@@ -1,6 +1,7 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: p2_Carregar_Dados_BigQuery.py
-# CORRIGIDO: Adicionadas 3 turmas/escolas específicas à lista de exclusão.
+# CORRIGIDO: Lógica de filtro específico alterada de "correspondência exata"
+# para "começa com" para abranger as variações nos nomes das turmas.
 # ==============================================================================
 
 import streamlit as st
@@ -59,26 +60,26 @@ if uploaded_parquet:
     mascara_keywords = df_para_envio['TURMA'].str.contains(regex_pattern, case=False, na=False)
 
     # Filtro 2: Por combinação específica de Turma e Escola
+    # A lógica agora verifica se a TURMA "começa com" o texto fornecido.
     turmas_escolas_excluir = [
         ('6º Ano - Integral - D', 'ANTONIO M CERETTA, C E-EF M PROFIS'),
         ('3ª Série - Noite - E - ENSINO MEDIO', 'ARTHUR C E SILVA, C E PRES-EF M'),
         ('3ª Série - Noite - C - ENSINO MEDIO', 'ARTHUR C E SILVA, C E PRES-EF M')
     ]
 
-    # Inicializa a máscara específica com todos os valores como Falso
     mascara_especifica = pd.Series([False] * len(df_para_envio), index=df_para_envio.index)
 
-    # Adiciona uma condição OR para cada par (turma, escola)
-    for turma, escola in turmas_escolas_excluir:
-        mascara_especifica |= (df_para_envio['TURMA'] == turma) & (df_para_envio['ESCOLA'] == escola)
+    for turma_prefixo, escola in turmas_escolas_excluir:
+        # --- ALTERAÇÃO PRINCIPAL AQUI ---
+        # Trocado '==' por '.str.startswith()' para uma correspondência mais flexível
+        mascara_especifica |= (df_para_envio['TURMA'].str.startswith(turma_prefixo, na=False)) & (
+                    df_para_envio['ESCOLA'] == escola)
 
     # Combina as duas máscaras de exclusão
     mascara_total_exclusao = mascara_keywords | mascara_especifica
 
-    # Aplica o filtro final
     df_filtrado = df_para_envio[~mascara_total_exclusao]
 
-    # Pega a lista de turmas que foram excluídas para exibir ao usuário
     turmas_excluidas = sorted(df_para_envio[mascara_total_exclusao]['TURMA'].unique())
 
     if turmas_excluidas:
