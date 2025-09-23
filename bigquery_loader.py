@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO: bigquery_loader.py
-# CORRIGIDO: Função criar_analise_comparativa refeita para seguir a nova lógica de auditoria de pendências.
+# CORRIGIDO: Bug na função criar_analise_comparativa que causava o erro "'bool' object has no attribute 'to_numpy'".
 # ==============================================================================
 
 import streamlit as st
@@ -250,7 +250,7 @@ def get_analysis_audit_stats(_creds, dataset_id, table_name):
         return None
 
 
-# --- FUNÇÃO DE AUDITORIA COMPARATIVA REFEITA ---
+# --- FUNÇÃO DE AUDITORIA COMPARATIVA CORRIGIDA ---
 def criar_analise_comparativa(creds, dataset_id, analysis_name, weeks_to_compare, df_from_parquet):
     """
     Compara dados de um arquivo Parquet com pendências históricas do BigQuery.
@@ -283,38 +283,44 @@ def criar_analise_comparativa(creds, dataset_id, analysis_name, weeks_to_compare
 
         key_cols = ['DATA_DO_RELATORIO', 'ESCOLA', 'TURMA', 'HORARIO', 'DISCIPLINA']
 
-        # 3. Cruzar as pendências históricas com os novos dados
+        # 3. Cruzar as pendências históricas com os novos dados de forma robusta
         st.write("Passo C: Cruzando dados e identificando o que ainda está pendente...")
         df_merged = pd.merge(
-            df_historico_preparado[key_cols],  # Usamos apenas as chaves do que estava pendente
-            df_novo_preparado,
+            df_historico_preparado,
+            df_novo_preparado.rename(columns={
+                'REGISTRO_DE_AULA': 'NOVO_REGISTRO_AULA',
+                'REGISTRO_DE_CONTEUDO': 'NOVO_REGISTRO_CONTEUDO'
+            }),
             on=key_cols,
-            how='left'  # Traz os novos registros correspondentes para as pendências antigas
+            how='left'
         )
 
-        # 4. Filtrar para encontrar os que AINDA estão com pendências no novo arquivo
-        df_ainda_pendente = df_merged[
-            pd.isna(df_merged['REGISTRO_DE_AULA']) |
-            pd.isna(df_merged['REGISTRO_DE_CONTEUDO'])
-            ].copy()
+        # 4. Filtrar para encontrar os que AINDA estão com pendências (verificando as novas colunas)
+        mascara_ainda_pendente = pd.isna(df_merged['NOVO_REGISTRO_AULA']) | pd.isna(df_merged['NOVO_REGISTRO_CONTEUDO'])
+        df_resultado_final = df_merged[mascara_ainda_pendente]
 
-        # 5. Se houver pendências, carregar para uma nova tabela
-        if not df_ainda_pendente.empty:
+        # 5. Selecionar apenas as colunas originais para salvar no resultado
+        colunas_originais = df_historico_preparado.columns.tolist()
+        df_para_salvar = df_resultado_final[colunas_originais]
+
+        # 6. Se houver pendências, carregar para uma nova tabela
+        if not df_para_salvar.empty:
             st.write(
-                f"Passo D: Encontradas {len(df_ainda_pendente)} pendências restantes. Carregando para a tabela `{destination_table_name}`...")
-            # Adiciona a coluna SEMANA para consistência
-            df_ainda_pendente['SEMANA'] = 0  # Auditoria não é vinculada a uma semana específica
+                f"Passo D: Encontradas {len(df_para_salvar)} pendências restantes. Carregando para a tabela `{destination_table_name}`...")
 
             sucesso_carga = carregar_dados_no_bigquery(
-                df_ainda_pendente, creds, dataset_id,
+                df_para_salvar, creds, dataset_id,
                 mode='replace', table_name=destination_table_name
             )
             if sucesso_carga:
-                return True, f"Auditoria '{analysis_name}' concluída! Uma nova tabela `{destination_table_name}` foi criada com {len(df_ainda_pendente)} pendências."
+                return True, f"Auditoria '{analysis_name}' concluída! Uma nova tabela `{destination_table_name}` foi criada com {len(df_para_salvar)} pendências."
             else:
                 return False, f"Falha ao carregar a tabela de resultados `{destination_table_name}` no BigQuery."
         else:
             return True, "Auditoria concluída com sucesso! Todas as pendências anteriores foram resolvidas nos novos arquivos."
 
     except Exception as e:
+        # Adiciona o traceback ao erro para facilitar a depuração
+        import traceback
+        st.error(traceback.format_exc())
         return False, f"Erro ao criar a análise comparativa: {e}"
