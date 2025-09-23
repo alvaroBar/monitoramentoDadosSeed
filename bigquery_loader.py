@@ -1,7 +1,7 @@
 # ==============================================================================
 # ARQUIVO: bigquery_loader.py
-# CORRIGIDO: Re-adicionada a função `delete_week_data` que foi removida
-# acidentalmente, consertando a página de Manutenção de Dados.
+# CORRIGIDO: Re-adicionada a função `get_all_data_from_bq` para consertar
+# a página de Backup de Dados.
 # ==============================================================================
 
 import streamlit as st
@@ -199,6 +199,24 @@ def get_available_weeks(creds, dataset_id):
         return [week for week in df['SEMANA'].tolist() if week is not None]
     except Exception:
         return []
+
+
+# --- FUNÇÃO RE-ADICIONADA ---
+def get_all_data_from_bq(creds, dataset_id, week_filter=None):
+    """Busca todos os dados da tabela histórica, com um filtro opcional por semana."""
+    table_ref = f"`{PROJECT_ID}.{dataset_id}.relatorios_lrco`"
+    sql_query = f"SELECT * FROM {table_ref}"
+
+    if week_filter:
+        weeks_str = ','.join(map(str, week_filter))
+        sql_query += f" WHERE SEMANA IN ({weeks_str})"
+
+    try:
+        df = pandas_gbq.read_gbq(sql_query, project_id=PROJECT_ID, credentials=creds)
+        return df
+    except Exception as e:
+        st.error(f"Erro ao buscar dados do BigQuery: {e}")
+        return pd.DataFrame()
 
 
 # --- FUNÇÃO RE-ADICIONADA ---
