@@ -1,7 +1,7 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: p1_Extrair_Dados_PDF.py
-# CORRIGIDO: Lógica de extração de data refeita para buscar a data de 
-# impressão no rodapé, conforme especificado pelo usuário.
+# CORRIGIDO: Lógica de extração de data ajustada para capturar a data 
+# principal no topo do relatório, conforme nova instrução.
 # ==============================================================================
 
 import streamlit as st
@@ -20,16 +20,13 @@ def extrair_dados_de_pdf(arquivo_pdf, disciplinas_validas):
     dados_extraidos = []
     horario_re = r"\d{2}:\d{2}:\d{2}"
     registro_re = r"\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}"
+    # Regex para a data do relatório no formato dd/mm/aaaa
+    data_relatorio_re = r"\b\d{2}/\d{2}/\d{4}\b"
 
-    # Dicionário para converter mês de texto para número
-    meses_pt = {
-        'janeiro': '01', 'fevereiro': '02', 'março': '03', 'abril': '04',
-        'maio': '05', 'junho': '06', 'julho': '07', 'agosto': '08',
-        'setembro': '09', 'outubro': '10', 'novembro': '11', 'dezembro': '12'
-    }
-
+    # Variáveis são reiniciadas para cada arquivo
     nome_escola, municipio, data_relatorio = "N/A", "N/A", "N/A"
     turma_atual = None
+
     cabecalho_lido = False
     data_ja_encontrada = False
 
@@ -41,31 +38,26 @@ def extrair_dados_de_pdf(arquivo_pdf, disciplinas_validas):
 
                 linhas = texto_pagina.split("\n")
 
-                # Procura os dados do cabeçalho (escola, município) apenas uma vez
-                if not cabecalho_lido:
+                # Procura os dados do cabeçalho (data, escola, município) apenas na primeira página
+                if page_num == 0:
                     for idx, linha in enumerate(linhas):
+                        # --- LÓGICA DE DATA CORRIGIDA ---
+                        # Procura pela data do relatório (dd/mm/aaaa) primeiro
+                        if not data_ja_encontrada:
+                            match_data = re.search(data_relatorio_re, linha)
+                            if match_data:
+                                data_relatorio = match_data.group()
+                                data_ja_encontrada = True
+
+                        # Procura escola e município com base em seu texto âncora
                         if "SECRETARIA DE ESTADO DA EDUCAÇÃO" in linha.upper():
                             municipio_temp = linha.split("SECRETARIA")[0].strip()
                             if municipio_temp: municipio = municipio_temp
                             if idx + 1 < len(linhas):
                                 nome_escola_temp = linhas[idx + 1].strip()
                                 if nome_escola_temp: nome_escola = nome_escola_temp
-                            cabecalho_lido = True
-                            break
 
-                # Procura a data de impressão no rodapé (apenas uma vez)
-                if not data_ja_encontrada:
-                    for linha in linhas:
-                        if "impresso por:" in linha.lower():
-                            match_data = re.search(r'(\d{1,2})\s+([a-zA-Zç]+)\s+(\d{4})', linha, re.IGNORECASE)
-                            if match_data:
-                                dia, mes_nome, ano = match_data.groups()
-                                mes_num = meses_pt.get(mes_nome.lower())
-                                if mes_num:
-                                    data_relatorio = f"{int(dia):02d}/{mes_num}/{ano}"
-                                    data_ja_encontrada = True
-                                    break
-
+                # O resto do processamento para extrair os dados das aulas
                 for linha in linhas:
                     linha = linha.strip()
                     if " - " in linha and "TURMA" not in linha.upper() and "LANÇAMENTO" not in linha.upper():
