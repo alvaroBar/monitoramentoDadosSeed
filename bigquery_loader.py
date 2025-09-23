@@ -1,7 +1,7 @@
 # ==============================================================================
 # ARQUIVO: bigquery_loader.py
-# CORRIGIDO: Re-adicionada a função `get_all_data_from_bq` para consertar
-# a página de Backup de Dados.
+# CORRIGIDO: Re-adicionadas as funções `get_filter_options` e `query_data_from_bq`
+# para consertar a página de Consulta de Dados. Versão final.
 # ==============================================================================
 
 import streamlit as st
@@ -201,7 +201,6 @@ def get_available_weeks(creds, dataset_id):
         return []
 
 
-# --- FUNÇÃO RE-ADICIONADA ---
 def get_all_data_from_bq(creds, dataset_id, week_filter=None):
     """Busca todos os dados da tabela histórica, com um filtro opcional por semana."""
     table_ref = f"`{PROJECT_ID}.{dataset_id}.relatorios_lrco`"
@@ -219,7 +218,6 @@ def get_all_data_from_bq(creds, dataset_id, week_filter=None):
         return pd.DataFrame()
 
 
-# --- FUNÇÃO RE-ADICIONADA ---
 def delete_week_data(creds, dataset_id, week_to_delete):
     """Apaga os registros de uma semana específica da tabela histórica."""
     try:
@@ -228,11 +226,78 @@ def delete_week_data(creds, dataset_id, week_to_delete):
         delete_query = f"DELETE FROM {table_ref} WHERE SEMANA = {week_to_delete}"
 
         query_job = client.query(delete_query)
-        query_job.result()  # Aguarda a conclusão do trabalho
+        query_job.result()
 
         return True, f"Registros da semana {week_to_delete} apagados com sucesso."
     except Exception as e:
         return False, f"Erro ao apagar os dados da semana: {e}"
+
+
+# --- FUNÇÕES RE-ADICIONADAS PARA A PÁGINA DE CONSULTA ---
+@st.cache_data(ttl=3600)
+def get_filter_options(_creds, dataset_id):
+    """Busca todos os valores únicos para os filtros da página de consulta."""
+    table_ref = f"`{PROJECT_ID}.{dataset_id}.relatorios_lrco`"
+    query = f"""
+    SELECT
+      (SELECT ARRAY_AGG(DISTINCT SEMANA IGNORE NULLS ORDER BY SEMANA) FROM {table_ref}) AS semanas,
+      (SELECT ARRAY_AGG(DISTINCT MUNICIPIO IGNORE NULLS ORDER BY MUNICIPIO) FROM {table_ref}) AS municipios,
+      (SELECT ARRAY_AGG(DISTINCT ESCOLA IGNORE NULLS ORDER BY ESCOLA) FROM {table_ref}) AS escolas,
+      (SELECT ARRAY_AGG(DISTINCT DISCIPLINA IGNORE NULLS ORDER BY DISCIPLINA) FROM {table_ref}) AS disciplinas,
+      (SELECT ARRAY_AGG(DISTINCT TURMA IGNORE NULLS ORDER BY TURMA) FROM {table_ref}) AS turmas,
+      (SELECT MIN(DATA_DO_RELATORIO) FROM {table_ref}) as min_data,
+      (SELECT MAX(DATA_DO_RELATORIO) FROM {table_ref}) as max_data
+    """
+    try:
+        df = pandas_gbq.read_gbq(query, project_id=PROJECT_ID, credentials=_creds)
+        if not df.empty:
+            return df.to_dict('records')[0]
+    except Exception as e:
+        st.error(f"Erro ao buscar opções de filtro: {e}")
+    return {"semanas": [], "municipios": [], "escolas": [], "disciplinas": [], "turmas": [], "min_data": None,
+            "max_data": None}
+
+
+def _format_sql_in_clause(values):
+    """Função auxiliar para formatar listas para cláusulas IN do SQL."""
+    if not values: return "('')"
+    formatted_values = [f"'{str(v).replace("'", "''")}'" for v in values]
+    return f"({', '.join(formatted_values)})"
+
+
+def query_data_from_bq(creds, dataset_id, filters):
+    """Busca dados do BigQuery com base em um dicionário de filtros dinâmicos."""
+    table_ref = f"`{PROJECT_ID}.{dataset_id}.relatorios_lrco`"
+    sql_query = f"SELECT * FROM {table_ref}"
+    where_clauses = []
+
+    if filters.get("semanas"): where_clauses.append(f"SEMANA IN ({','.join(map(str, filters['semanas']))})")
+    if filters.get("municipios"): where_clauses.append(f"MUNICIPIO IN {_format_sql_in_clause(filters['municipios'])}")
+    if filters.get("escolas"): where_clauses.append(f"ESCOLA IN {_format_sql_in_clause(filters['escolas'])}")
+    if filters.get("turmas"): where_clauses.append(f"TURMA IN {_format_sql_in_clause(filters['turmas'])}")
+    if filters.get("disciplinas"): where_clauses.append(
+        f"DISCIPLINA IN {_format_sql_in_clause(filters['disciplinas'])}")
+    if filters.get("data_inicio") and filters.get("data_fim"):
+        data_inicio_str = filters['data_inicio'].strftime('%Y-%m-%d')
+        data_fim_str = filters['data_fim'].strftime('%Y-%m-%d')
+        where_clauses.append(f"DATA_DO_RELATORIO BETWEEN '{data_inicio_str}' AND '{data_fim_str}'")
+    if filters.get("null_filter"):
+        null_filter = filters["null_filter"]
+        if null_filter == "aula":
+            where_clauses.append("REGISTRO_DE_AULA IS NULL")
+        elif null_filter == "conteudo":
+            where_clauses.append("REGISTRO_DE_CONTEUDO IS NULL")
+        elif null_filter == "ambos":
+            where_clauses.append("(REGISTRO_DE_AULA IS NULL OR REGISTRO_DE_CONTEUDO IS NULL)")
+
+    if where_clauses: sql_query += " WHERE " + " AND ".join(where_clauses)
+    sql_query += " ORDER BY DATA_DO_RELATORIO DESC, HORARIO"
+
+    try:
+        return pandas_gbq.read_gbq(sql_query, project_id=PROJECT_ID, credentials=creds)
+    except Exception as e:
+        st.error(f"Erro ao executar a consulta no BigQuery: {e}")
+        return pd.DataFrame()
 
 
 def list_analysis_tables(creds, dataset_id):
@@ -249,15 +314,11 @@ def list_analysis_tables(creds, dataset_id):
 
 @st.cache_data(ttl=600)
 def get_analysis_audit_stats(_creds, dataset_id, table_name):
-    """
-    Busca estatísticas de auditoria (registros nulos) de uma tabela de análise.
-    """
+    """Busca estatísticas de auditoria (registros nulos) de uma tabela de análise."""
     if not table_name.startswith('auditoria_'):
         st.error("Nome de tabela de análise inválido.")
         return None
-
     table_ref = f"`{PROJECT_ID}.{dataset_id}.{table_name}`"
-
     try:
         counts_query = f"""
             SELECT
@@ -267,12 +328,9 @@ def get_analysis_audit_stats(_creds, dataset_id, table_name):
             FROM {table_ref}
         """
         df_counts = pandas_gbq.read_gbq(counts_query, project_id=PROJECT_ID, credentials=_creds)
-
         details_query = f"""
             SELECT
-                ESCOLA,
-                DISCIPLINA,
-                TURMA,
+                ESCOLA, DISCIPLINA, TURMA,
                 COUNTIF(REGISTRO_DE_AULA IS NULL) AS aulas_faltantes,
                 COUNTIF(REGISTRO_DE_CONTEUDO IS NULL) AS conteudos_faltantes
             FROM {table_ref}
@@ -281,80 +339,57 @@ def get_analysis_audit_stats(_creds, dataset_id, table_name):
             ORDER BY ESCOLA, DISCIPLINA, TURMA
         """
         df_details = pandas_gbq.read_gbq(details_query, project_id=PROJECT_ID, credentials=_creds)
-
         stats = {
             "counts": df_counts.to_dict('records')[0] if not df_counts.empty else {},
             "details": df_details
         }
         return stats
-
     except Exception as e:
         st.error(f"Erro ao gerar o relatório de auditoria: {e}")
         return None
 
 
 def criar_analise_comparativa(creds, dataset_id, analysis_name, weeks_to_compare, df_from_parquet):
-    """
-    Compara dados de um arquivo Parquet com pendências históricas do BigQuery.
-    """
+    """Compara dados de um arquivo Parquet com pendências históricas do BigQuery."""
     clean_name = re.sub(r'\W+', '_', analysis_name).lower()
-    if not clean_name:
-        return False, "O nome da análise é inválido."
-
+    if not clean_name: return False, "O nome da análise é inválido."
     destination_table_name = f"auditoria_{clean_name}"
-
     try:
         st.write("Passo A: Buscando pendências históricas no BigQuery...")
         weeks_str = ','.join(map(str, weeks_to_compare))
         query_pendentes = f"""
-            SELECT *
-            FROM `{PROJECT_ID}.{dataset_id}.relatorios_lrco`
-            WHERE SEMANA IN ({weeks_str})
-            AND (REGISTRO_DE_AULA IS NULL OR REGISTRO_DE_CONTEUDO IS NULL)
+            SELECT * FROM `{PROJECT_ID}.{dataset_id}.relatorios_lrco`
+            WHERE SEMANA IN ({weeks_str}) AND (REGISTRO_DE_AULA IS NULL OR REGISTRO_DE_CONTEUDO IS NULL)
         """
         df_historico_pendente = pandas_gbq.read_gbq(query_pendentes, project_id=PROJECT_ID, credentials=creds)
-
         if df_historico_pendente.empty:
             return True, "Parabéns! Não havia pendências nos dados históricos para as semanas selecionadas."
-
         st.write("Passo B: Preparando dados para comparação...")
         df_novo_preparado = preparar_dataframe_para_bigquery(df_from_parquet)
         df_historico_preparado = preparar_dataframe_para_bigquery(df_historico_pendente)
-
         key_cols = ['DATA_DO_RELATORIO', 'MUNICIPIO', 'ESCOLA', 'TURMA', 'HORARIO', 'DISCIPLINA']
-
         st.write("Passo C: Cruzando dados e identificando o que ainda está pendente...")
         df_merged = pd.merge(
             df_historico_preparado,
-            df_novo_preparado.rename(columns={
-                'REGISTRO_DE_AULA': 'NOVO_REGISTRO_AULA',
-                'REGISTRO_DE_CONTEUDO': 'NOVO_REGISTRO_CONTEUDO'
-            }),
-            on=key_cols,
-            how='left'
+            df_novo_preparado.rename(
+                columns={'REGISTRO_DE_AULA': 'NOVO_REGISTRO_AULA', 'REGISTRO_DE_CONTEUDO': 'NOVO_REGISTRO_CONTEUDO'}),
+            on=key_cols, how='left'
         )
-
         mascara_ainda_pendente = pd.isna(df_merged['NOVO_REGISTRO_AULA']) | pd.isna(df_merged['NOVO_REGISTRO_CONTEUDO'])
         df_resultado_final = df_merged[mascara_ainda_pendente]
-
         colunas_originais = df_historico_preparado.columns.tolist()
         df_para_salvar = df_resultado_final[colunas_originais]
-
         if not df_para_salvar.empty:
             st.write(
                 f"Passo D: Encontradas {len(df_para_salvar)} pendências restantes. Carregando para a tabela `{destination_table_name}`...")
-
-            sucesso_carga = carregar_dados_no_bigquery(
-                df_para_salvar, creds, dataset_id,
-                mode='replace', table_name=destination_table_name
-            )
+            sucesso_carga = carregar_dados_no_bigquery(df_para_salvar, creds, dataset_id, mode='replace',
+                                                       table_name=destination_table_name)
             if sucesso_carga:
                 return True, f"Auditoria '{analysis_name}' concluída! Uma nova tabela `{destination_table_name}` foi criada com {len(df_para_salvar)} pendências."
             else:
                 return False, f"Falha ao carregar a tabela de resultados `{destination_table_name}` no BigQuery."
         else:
             return True, "Auditoria concluída com sucesso! Todas as pendências anteriores foram resolvidas nos novos arquivos."
-
     except Exception as e:
         import traceback
         st.error(traceback.format_exc())
