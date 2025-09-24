@@ -38,6 +38,7 @@ class BigQueryService:
         except Exception as e:
             return False, f"Erro ao apagar os dados da semana: {e}"
 
+
     # --- Métodos de Leitura (Queries) ---
     def get_dashboard_stats(self):
         # ... (código da função get_dashboard_stats, mas usando self.table_id, etc.)
@@ -66,6 +67,22 @@ class BigQueryService:
 
     def get_analysis_audit_stats(self, table_name):
         # ... (código da função get_analysis_audit_stats)
+        pass
+
+    # ADICIONE ESTE MÉTODO AQUI
+    def get_available_weeks(self):
+        """Busca todas as semanas únicas e ordenadas disponíveis na tabela histórica."""
+        sql_query = f"SELECT DISTINCT SEMANA FROM `{self.table_id}` ORDER BY SEMANA"
+        try:
+            df = pandas_gbq.read_gbq(sql_query, project_id=self.project_id, credentials=self.creds)
+            # Retorna uma lista de semanas, removendo valores nulos se houver
+            return [week for week in df['SEMANA'].tolist() if week is not None]
+        except Exception as e:
+            st.error(f"Erro ao buscar semanas disponíveis: {e}")
+            return []
+
+    def get_dashboard_stats(self):
+        # ... (código da função get_dashboard_stats)
         pass
 
     def get_pending_historical_data(self, weeks):

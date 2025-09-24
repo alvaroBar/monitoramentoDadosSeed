@@ -1,7 +1,5 @@
 import streamlit as st
 import pandas as pd
-
-from app import bq_service
 from services import auth_service
 from services.bigquery_service import BigQueryService
 from streamlit_autorefresh import st_autorefresh
@@ -9,6 +7,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(layout="wide")
 st.title("Backup de Dados do BigQuery")
 
+# 1. Autenticação é a primeira coisa
 auth_service.autenticar_usuario()
 
 if 'user_info' not in st.session_state:
@@ -20,7 +19,7 @@ user_info = st.session_state.user_info
 user_email = user_info.get("email")
 user_name = user_info.get("name", "Usuário")
 
-# --- CORREÇÃO: Mapeia o e-mail para o dataset_id em cada execução ---
+# Mapeia o e-mail para o dataset_id em cada execução
 try:
     office_mapping = st.secrets.office_mapping
     if user_email in office_mapping:
@@ -31,6 +30,14 @@ try:
 except (AttributeError, KeyError):
     st.error("ERRO DE CONFIGURAÇÃO: O mapeamento de escritórios [office_mapping] não foi encontrado nos Segredos do Streamlit.")
     st.stop()
+
+# 2. Inicializar o serviço do BigQuery e guardá-lo na sessão
+if 'bq_service' not in st.session_state:
+    st.session_state.bq_service = BigQueryService(
+        credentials=st.session_state.credentials,
+        dataset_id=st.session_state.dataset_id
+    )
+bq_service = st.session_state.bq_service
 
 with st.sidebar:
     st.subheader(f"Olá, {user_name}!")
