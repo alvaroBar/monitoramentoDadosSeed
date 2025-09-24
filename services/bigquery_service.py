@@ -175,12 +175,17 @@ class BigQueryService:
             df_counts = pandas_gbq.read_gbq(counts_query, project_id=_self.project_id, credentials=_self.creds)
 
             details_query = f"""
-                SELECT ESCOLA, DISCIPLINA, TURMA,
-                       COUNTIF(REGISTRO_DE_AULA IS NULL) AS aulas_faltantes,
-                       COUNTIF(REGISTRO_DE_CONTEUDO IS NULL) AS conteudos_faltantes
-                FROM {table_ref} GROUP BY ESCOLA, DISCIPLINA, TURMA
-                HAVING aulas_faltantes > 0 OR conteudos_faltantes > 0
-                ORDER BY ESCOLA, DISCIPLINA, TURMA
+                SELECT
+                    DATA_DO_RELATORIO,
+                    HORARIO,
+                    ESCOLA,
+                    DISCIPLINA,
+                    TURMA,
+                    CASE WHEN REGISTRO_DE_AULA IS NULL THEN 'Sim' ELSE 'Não' END as PENDENCIA_AULA,
+                    CASE WHEN REGISTRO_DE_CONTEUDO IS NULL THEN 'Sim' ELSE 'Não' END as PENDENCIA_CONTEUDO
+                FROM {table_ref}
+                WHERE REGISTRO_DE_AULA IS NULL OR REGISTRO_DE_CONTEUDO IS NULL
+                ORDER BY DATA_DO_RELATORIO, HORARIO, ESCOLA
             """
             df_details = pandas_gbq.read_gbq(details_query, project_id=_self.project_id, credentials=_self.creds)
             return {"type": "detailed", "counts": df_counts.to_dict('records')[0], "details": df_details}

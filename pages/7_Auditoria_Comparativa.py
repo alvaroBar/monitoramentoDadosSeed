@@ -133,11 +133,28 @@ else:
             if not df_details.empty:
                 st.markdown("---")
                 st.subheader("Detalhes das Pendências")
-                csv_data = df_details.to_csv(index=False).encode('utf-8')
-                st.download_button(label="📥 Baixar detalhes como CSV", data=csv_data, file_name=f"{selected_table}.csv",
-                                   mime="text/csv", use_container_width=True)
-                st.dataframe(df_details, use_container_width=True, hide_index=True)
-            else:
-                st.success("🎉 Todos os registros nesta auditoria estão completos.")
+
+                if not df_details.empty:
+                    csv_data = df_details.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label=f"📥 Baixar detalhes como CSV",
+                        data=csv_data,
+                        file_name=f"{selected_table}_detalhes.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+                    st.dataframe(
+                        df_details,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "DATA_DO_RELATORIO": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
+                            "HORARIO": st.column_config.TimeColumn("Horário", format="HH:mm"),
+                            "PENDENCIA_AULA": st.column_config.TextColumn("Aula Pendente?"),
+                            "PENDENCIA_CONTEUDO": st.column_config.TextColumn("Conteúdo Pendente?")
+                        }
+                    )
+                else:
+                    st.success("🎉 Não foram encontrados registros com pendências nesta auditoria.")
         else:
             st.warning("Formato de relatório de auditoria desconhecido.")
