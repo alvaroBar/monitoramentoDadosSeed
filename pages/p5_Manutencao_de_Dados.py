@@ -1,16 +1,15 @@
 import streamlit as st
 import pandas as pd
-from bigquery_loader import (
-    autenticar_usuario,
-    get_available_weeks,
-    delete_week_data,
-    carregar_dados_no_bigquery
-)
+
+from app import bq_service
+from services import auth_service
+from services.bigquery_service import BigQueryService
+from utils.dataframe_utils import preparar_dataframe_para_bigquery
 
 from streamlit_autorefresh import st_autorefresh
 
 # --- Lógica de Autenticação e Mapeamento ---
-autenticar_usuario()
+auth_service.autenticar_usuario()
 
 if 'user_info' not in st.session_state:
     st.info("Por favor, faça login com a sua conta Google para continuar.")
@@ -48,7 +47,7 @@ st.title("⚙️ Manutenção de Dados")
 st.warning("Atenção: As operações nesta página modificam permanentemente o banco de dados.")
 
 with st.spinner("A buscar semanas disponíveis..."):
-    available_weeks = get_available_weeks(creds, dataset_id)
+    available_weeks = bq_service.get_available_weeks()
 
 # --- Secção 1: Apagar Dados de uma Semana ---
 st.markdown("---")
@@ -69,7 +68,7 @@ with st.expander("Apagar Dados de uma Semana Inteira", expanded=False):
             if st.checkbox(f"Confirmo que desejo apagar permanentemente os dados da Semana {week_to_delete}."):
                 if st.button("Apagar Semana", type="primary"):
                     with st.spinner(f"A apagar dados da Semana {week_to_delete}..."):
-                        success, message = delete_week_data(creds, dataset_id, week_to_delete)
+                        success, message = bq_service.delete_week_data(week_to_delete)
                         if success:
                             st.success(message)
                             st.rerun()
@@ -95,7 +94,7 @@ with st.expander("Sobrescrever Dados de uma Semana com um Ficheiro CSV", expande
             with st.spinner(f"A iniciar a substituição dos dados da Semana {week_to_overwrite}..."):
                 # Passo 1: Apagar dados existentes
                 st.write(f"Passo 1/3: A apagar dados existentes da Semana {week_to_overwrite}...")
-                delete_success, delete_message = delete_week_data(creds, dataset_id, week_to_overwrite)
+                delete_success, delete_message = bq_service.delete_week_data(week_to_delete)
 
                 if delete_success:
                     st.write(f"-> {delete_message}")
@@ -115,7 +114,8 @@ with st.expander("Sobrescrever Dados de uma Semana com um Ficheiro CSV", expande
 
                         # Passo 3: Carregar os novos dados
                         st.write("Passo 3/3: A carregar os novos dados no BigQuery...")
-                        load_success = carregar_dados_no_bigquery(df_new_data, creds, dataset_id, mode='append')
+                        df_preparado = preparar_dataframe_para_bigquery(df_new_data)
+                        load_success = bq_service.carregar_dados(df_preparado, mode='append')
 
                         if load_success:
                             st.success(

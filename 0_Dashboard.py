@@ -5,8 +5,13 @@
 
 import streamlit as st
 import pandas as pd
-from bigquery_loader import autenticar_usuario, get_dashboard_stats
+#from bigquery_loader import autenticar_usuario, get_dashboard_stats
 from streamlit_autorefresh import st_autorefresh
+
+# Importe os serviços necessários no topo do arquivo
+from services import auth_service
+from services.bigquery_service import BigQueryService
+
 
 st.set_page_config(
     page_title="Dashboard de Acompanhamento",
@@ -45,8 +50,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- Autenticação e Lógica de Mapeamento ---
-autenticar_usuario()
+# 1. Autenticação é a primeira coisa
+auth_service.autenticar_usuario()
 
 if 'user_info' not in st.session_state:
     st.info("Por favor, faça login com a sua conta Google para continuar.")
@@ -78,6 +83,18 @@ with st.sidebar:
 # --- Keep-alive da sessão ---
 st_autorefresh(interval=5 * 60 * 1000, key="session_refresher_dashboard")
 
+
+# 2. Inicializar o serviço do BigQuery e guardá-lo na sessão
+# Isso evita recriar a conexão a cada interação na página.
+if 'bq_service' not in st.session_state:
+    st.session_state.bq_service = BigQueryService(
+        credentials=st.session_state.credentials,
+        dataset_id=st.session_state.dataset_id
+    )
+bq_service = st.session_state.bq_service
+
+# Agora você pode usar bq_service.nome_do_metodo() no resto do script
+
 # --- Conteúdo do Dashboard ---
 
 st.title("Dashboard de Acompanhamento LRCO")
@@ -88,7 +105,7 @@ creds = st.session_state.credentials
 dataset_id = st.session_state.dataset_id
 
 with st.spinner("A carregar estatísticas..."):
-    stats = get_dashboard_stats(creds, dataset_id)
+    stats = bq_service.get_dashboard_stats()
 
 if stats:
     st.markdown("---")

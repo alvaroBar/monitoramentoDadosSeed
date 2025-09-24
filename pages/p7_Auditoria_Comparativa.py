@@ -8,19 +8,15 @@ import streamlit as st
 import pandas as pd
 from streamlit_autorefresh import st_autorefresh
 
-# Importa as funções necessárias
-from bigquery_loader import (
-    autenticar_usuario,
-    get_available_weeks,
-    criar_analise_comparativa,
-    list_analysis_tables,
-    get_analysis_audit_stats
-)
+from app import bq_service
+from services import auth_service
+from services.bigquery_service import BigQueryService
+from services import analysis_service # Nova importação!
 
 st.set_page_config(layout="wide")
 st.title("Auditoria Comparativa de Pendências 🔍")
 
-autenticar_usuario()
+auth_service.autenticar_usuario()
 
 if 'user_info' not in st.session_state:
     st.info("Por favor, faça login com a sua conta Google para continuar.")
@@ -76,7 +72,7 @@ with st.expander("➕ Gerar Nova Auditoria de Pendências", expanded=True):
 
     st.write("3. Selecione as semanas no banco de dados que correspondem a estes relatórios.")
     with st.spinner("A carregar semanas disponíveis..."):
-        available_weeks = get_available_weeks(creds, dataset_id)
+        available_weeks = bq_service.get_available_weeks()
 
     if not available_weeks:
         st.warning("Não há semanas disponíveis no histórico para comparar.")
@@ -105,8 +101,9 @@ with st.expander("➕ Gerar Nova Auditoria de Pendências", expanded=True):
                     if df_from_parquet.empty:
                         st.error("O arquivo Parquet está vazio ou corrompido.")
                     else:
-                        sucesso, mensagem = criar_analise_comparativa(creds, dataset_id, analysis_name, selected_weeks,
-                                                                      df_from_parquet)
+                        sucesso, mensagem = analysis_service.criar_analise_comparativa(
+                            bq_service, analysis_name, selected_weeks, df_from_parquet
+                        )
                         if sucesso:
                             st.success(mensagem)
                             st.balloons()
@@ -121,7 +118,7 @@ st.markdown("---")
 st.header("Visualizar Auditorias Salvas")
 
 with st.spinner("A buscar auditorias existentes..."):
-    analysis_tables = list_analysis_tables(creds, dataset_id)
+    analysis_tables = bq_service.list_analysis_tables()
 
 if not analysis_tables:
     st.info("Ainda não há nenhuma auditoria criada. Gere uma acima para começar.")
@@ -131,7 +128,7 @@ else:
 
     if selected_table != "Selecione uma auditoria para visualizar...":
         with st.spinner(f"A gerar resumo para a auditoria '{selected_table}'..."):
-            audit_stats = get_analysis_audit_stats(creds, dataset_id, selected_table)
+            audit_stats = bq_service.get_analysis_audit_stats(selected_table)
 
         if not audit_stats:
             st.warning("Não foi possível gerar o resumo para esta auditoria.")

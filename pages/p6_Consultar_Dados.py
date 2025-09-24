@@ -8,13 +8,14 @@ import pandas as pd
 from streamlit_autorefresh import st_autorefresh
 import datetime
 
-# Importa as funções necessárias do nosso módulo loader
-from bigquery_loader import autenticar_usuario, get_filter_options, query_data_from_bq
+from app import bq_service
+from services import auth_service
+from services.bigquery_service import BigQueryService
 
 st.set_page_config(layout="wide")
 st.title("Consulta Avançada de Dados 🔎")
 
-autenticar_usuario()
+auth_service.autenticar_usuario()
 
 if 'user_info' not in st.session_state:
     st.info("Por favor, faça login com a sua conta Google para continuar.")
@@ -51,7 +52,7 @@ creds = st.session_state.credentials
 dataset_id = st.session_state.dataset_id
 
 with st.spinner("A carregar opções de filtro do banco de dados..."):
-    opcoes_filtro = get_filter_options(creds, dataset_id)
+    opcoes_filtro = bq_service.get_filter_options()
 
 # --- Interface de Filtros ---
 st.header("Filtros de Busca")
@@ -114,7 +115,7 @@ if submitted:
         st.warning("Por favor, selecione pelo menos um filtro para iniciar a busca.")
     else:
         with st.spinner("A buscar dados no BigQuery..."):
-            st.session_state.search_results = query_data_from_bq(creds, dataset_id, filters)
+            st.session_state.search_results = bq_service.query_data(filters)
             st.session_state.submitted_form = True
 
 # --- Exibição dos Resultados ---

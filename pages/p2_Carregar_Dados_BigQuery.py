@@ -5,12 +5,16 @@
 
 import streamlit as st
 import pandas as pd
-from bigquery_loader import autenticar_usuario, get_latest_week, carregar_dados_no_bigquery
+
+from app import bq_service
+from services import auth_service
+from services.bigquery_service import BigQueryService
+from utils.dataframe_utils import preparar_dataframe_para_bigquery
 
 st.set_page_config(layout="wide")
 st.title("Passo 2: Carregar Dados para o BigQuery ☁️")
 
-autenticar_usuario()
+auth_service.autenticar_usuario()
 
 if 'user_info' not in st.session_state:
     st.info("Por favor, faça login com a sua conta Google para continuar.")
@@ -43,7 +47,7 @@ if uploaded_parquet:
 
     creds = st.session_state.credentials
     dataset_id = st.session_state.dataset_id
-    ultima_semana = get_latest_week(creds, dataset_id)
+    ultima_semana = bq_service.get_latest_week()
     semana_sugerida = ultima_semana + 1
 
     semana_para_envio = st.number_input(
@@ -101,7 +105,8 @@ if uploaded_parquet:
 
     if st.button("Enviar para o BigQuery", use_container_width=True, type="primary"):
         with st.spinner("Conectando e carregando dados... Este processo é rápido."):
-            sucesso = carregar_dados_no_bigquery(df_filtrado_final, creds, dataset_id, mode='append')
+            df_preparado = preparar_dataframe_para_bigquery(df_filtrado_final)
+            sucesso = bq_service.carregar_dados(df_preparado, mode='append')
             if sucesso:
                 st.success(f"Dados da semana {semana_para_envio} enviados com sucesso!")
                 st.balloons()

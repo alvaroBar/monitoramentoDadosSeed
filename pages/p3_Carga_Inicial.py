@@ -8,8 +8,10 @@ import pandas as pd
 import time
 from streamlit_autorefresh import st_autorefresh
 
-# Importa as funções necessárias do nosso módulo loader
-from bigquery_loader import autenticar_usuario, carregar_dados_no_bigquery
+from app import bq_service
+from services import auth_service
+from services.bigquery_service import BigQueryService
+from utils.dataframe_utils import preparar_dataframe_para_bigquery
 
 
 def formatar_tempo(segundos):
@@ -23,7 +25,7 @@ def formatar_tempo(segundos):
 st.set_page_config(layout="wide")
 st.title("Carga Inicial de Dados Históricos 🚚")
 
-autenticar_usuario()
+auth_service.autenticar_usuario()
 
 if 'user_info' not in st.session_state:
     st.info("Por favor, faça login com a sua conta Google para continuar.")
@@ -108,7 +110,8 @@ if uploaded_file is not None:
                 progress_bar.progress(progresso_atual, text=texto_progresso)
                 status_text.write(f"Enviando {len(chunk):,} linhas...".replace(",", "."))
 
-                sucesso_chunk = carregar_dados_no_bigquery(chunk, creds, dataset_id, modo_de_carga)
+                chunk_preparado = preparar_dataframe_para_bigquery(chunk)
+                sucesso_chunk = bq_service.carregar_dados(chunk_preparado, mode=modo_de_carga)
 
                 if not sucesso_chunk:
                     sucesso_geral = False

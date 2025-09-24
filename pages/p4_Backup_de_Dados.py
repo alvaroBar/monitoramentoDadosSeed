@@ -1,12 +1,15 @@
 import streamlit as st
 import pandas as pd
-from bigquery_loader import autenticar_usuario, get_available_weeks, get_all_data_from_bq
+
+from app import bq_service
+from services import auth_service
+from services.bigquery_service import BigQueryService
 from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(layout="wide")
 st.title("Backup de Dados do BigQuery")
 
-autenticar_usuario()
+auth_service.autenticar_usuario()
 
 if 'user_info' not in st.session_state:
     st.info("Por favor, faça login com a sua conta Google para continuar.")
@@ -49,7 +52,7 @@ dataset_id = st.session_state.dataset_id
 
 try:
     with st.spinner("Buscando semanas disponíveis no BigQuery..."):
-        available_weeks = get_available_weeks(creds, dataset_id)
+        available_weeks = bq_service.get_available_weeks()
 
     if available_weeks:
         selected_weeks = st.multiselect(
@@ -61,7 +64,7 @@ try:
         if st.button("Buscar Dados para Backup", use_container_width=True):
             week_filter = selected_weeks if selected_weeks else None
             with st.spinner("Buscando dados do BigQuery... Isso pode levar um tempo."):
-                df_backup = get_all_data_from_bq(creds, dataset_id, week_filter=week_filter)
+                df_backup = bq_service.get_all_data(week_filter=week_filter)
                 if not df_backup.empty:
                     st.session_state.backup_data = df_backup
                     st.rerun()
