@@ -1,4 +1,4 @@
-# requirements.txt - Versão Recomendada
+# requirements.txt - Versão Completa e Corrigida
 
 streamlit==1.35.0
 pandas==2.2.2
