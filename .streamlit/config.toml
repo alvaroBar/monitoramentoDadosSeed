@@ -9,7 +9,7 @@ secondaryBackgroundColor="#262730"
 [pages]
 "app.py" = { title = "Dashboard", icon = "📊" }
 "pages/p1_Extrair_Dados_PDF.py" = { title = "1. Extrair Dados (PDF)", icon = "📄" }
-"pages/p2_Carregar_Dados_BigQuery.py" = { title = "2. Carregar Dados", icon = "☁️" } 
+"pages/p2_Carregar_Dados_BigQuery.py" = { title = "2. Carregar Dados", icon = "☁️" }
 "pages/p3_Carga_Inicial.py" = { title = "3. Carga Inicial", icon = "🚚" }
 "pages/p4_Backup_de_Dados.py" = { title = "Backup de Dados", icon = "💾" }
 "pages/p5_Manutencao_de_Dados.py" = { title = "Manutenção", icon = "⚙️" }
