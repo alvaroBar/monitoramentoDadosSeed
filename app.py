@@ -112,7 +112,10 @@ if stats and stats.get('total_registros', 0) > 0:
     df_escolas_pendentes = stats.get("escolas_com_pendencias")
     num_escolas_pendentes = stats.get("total_escolas_com_pendencias", 0)
 
-    col1, col2, col3, col4 = st.columns(4)
+    # Bloco Novo de KPIs
+    ultima_semana = stats.get("ultima_semana_lancada", 0)
+
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.metric(label="Total de Registros", value=f"{total_registros:,}".replace(",", "."))
     with col2:
@@ -124,6 +127,8 @@ if stats and stats.get('total_registros', 0) > 0:
     with col4:
         st.metric(label="Escolas com Pendências", value=num_escolas_pendentes,
                   help="Número de escolas com pelo menos um registro de aula ou conteúdo faltando.")
+    with col5:
+        st.metric(label="Última Semana Lançada", value=int(ultima_semana) if ultima_semana else 0)
 
     st.markdown("---")
 

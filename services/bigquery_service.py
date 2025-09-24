@@ -43,12 +43,13 @@ class BigQueryService:
     def get_dashboard_stats(self):
         """Busca estatísticas agregadas e acionáveis do BigQuery para o dashboard."""
         try:
-            # --- Consultas existentes (sem alteração) ---
+            # Query Nova
             stats_query = f"""
                 SELECT
                     COUNT(*) AS total_registros,
                     MAX(DATA_DO_RELATORIO) AS ultima_data,
                     COUNT(DISTINCT SEMANA) as total_semanas,
+                    MAX(SEMANA) as ultima_semana_lancada,
                     COUNTIF(REGISTRO_DE_AULA IS NULL) as sem_registro_aula,
                     COUNTIF(REGISTRO_DE_CONTEUDO IS NULL) as sem_registro_conteudo
                 FROM {self.table_id}
