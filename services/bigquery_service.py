@@ -81,9 +81,53 @@ class BigQueryService:
             st.error(f"Erro ao buscar semanas disponíveis: {e}")
             return []
 
+# services/bigquery_service.py
+
     def get_dashboard_stats(self):
-        # ... (código da função get_dashboard_stats)
-        pass
+        """Busca estatísticas agregadas do BigQuery para o dashboard."""
+        try:
+            # Consulta 1: Estatísticas principais
+            stats_query = f"""
+                SELECT
+                    COUNT(*) AS total_registros,
+                    MAX(DATA_DO_RELATORIO) AS ultima_data,
+                    COUNT(DISTINCT SEMANA) as total_semanas,
+                    COUNTIF(REGISTRO_DE_AULA IS NULL) as sem_registro_aula,
+                    COUNTIF(REGISTRO_DE_CONTEUDO IS NULL) as sem_registro_conteudo
+                FROM `{self.table_id}`
+            """
+            df_stats = pandas_gbq.read_gbq(stats_query, project_id=self.project_id, credentials=self.creds)
+            stats_data = df_stats.to_dict('records')[0] if not df_stats.empty else {}
+
+            # Consulta 2: Top 5 Disciplinas
+            disciplinas_query = f"""
+                SELECT DISCIPLINA, COUNT(*) AS contagem
+                FROM `{self.table_id}`
+                WHERE DISCIPLINA IS NOT NULL
+                GROUP BY DISCIPLINA
+                ORDER BY contagem DESC
+                LIMIT 5
+            """
+            df_top_disciplinas = pandas_gbq.read_gbq(disciplinas_query, project_id=self.project_id, credentials=self.creds)
+
+            # Consulta 3: Registros por semana
+            semana_query = f"""
+                SELECT SEMANA, COUNT(*) AS contagem
+                FROM `{self.table_id}`
+                WHERE SEMANA IS NOT NULL
+                GROUP BY SEMANA
+                ORDER BY SEMANA
+            """
+            df_registros_semana = pandas_gbq.read_gbq(semana_query, project_id=self.project_id, credentials=self.creds)
+            if not df_registros_semana.empty:
+                df_registros_semana = df_registros_semana.set_index('SEMANA')
+
+            # Combina todos os resultados em um único dicionário
+            return {**stats_data, "top_disciplinas": df_top_disciplinas, "registros_por_semana": df_registros_semana}
+
+        except Exception as e:
+            st.warning(f"Não foi possível buscar as estatísticas do dashboard: {e}")
+            return {}
 
     def get_pending_historical_data(self, weeks):
         """Busca dados históricos que estão com pendências."""
