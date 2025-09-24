@@ -110,7 +110,7 @@ if stats and stats.get('total_registros', 0) > 0:
 
     # Busca o número de escolas com problemas
     df_escolas_pendentes = stats.get("escolas_com_pendencias")
-    num_escolas_pendentes = len(df_escolas_pendentes) if df_escolas_pendentes is not None else 0
+    num_escolas_pendentes = stats.get("total_escolas_com_pendencias", 0)
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:

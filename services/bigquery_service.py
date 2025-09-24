@@ -40,12 +40,10 @@ class BigQueryService:
 
     # --- Métodos de Leitura (Queries) ---
 
-    # services/bigquery_service.py -> método get_dashboard_stats atualizado
-
     def get_dashboard_stats(self):
         """Busca estatísticas agregadas e acionáveis do BigQuery para o dashboard."""
         try:
-            # --- Consulta 1: Estatísticas principais (existente) ---
+            # --- Consultas existentes (sem alteração) ---
             stats_query = f"""
                 SELECT
                     COUNT(*) AS total_registros,
@@ -58,51 +56,45 @@ class BigQueryService:
             df_stats = pandas_gbq.read_gbq(stats_query, project_id=self.project_id, credentials=self.creds)
             stats_data = df_stats.to_dict('records')[0] if not df_stats.empty else {}
 
-            # --- Consulta 2: Top 5 Disciplinas (existente) ---
-            disciplinas_query = f"""
-                SELECT DISCIPLINA, COUNT(*) AS contagem FROM {self.table_id}
-                WHERE DISCIPLINA IS NOT NULL GROUP BY DISCIPLINA ORDER BY contagem DESC LIMIT 5
-            """
+            disciplinas_query = f"SELECT DISCIPLINA, COUNT(*) AS contagem FROM {self.table_id} WHERE DISCIPLINA IS NOT NULL GROUP BY DISCIPLINA ORDER BY contagem DESC LIMIT 5"
             df_top_disciplinas = pandas_gbq.read_gbq(disciplinas_query, project_id=self.project_id, credentials=self.creds)
 
-            # --- Consulta 3: Registros por semana (existente) ---
-            semana_query = f"""
-                SELECT SEMANA, COUNT(*) AS contagem FROM {self.table_id}
-                WHERE SEMANA IS NOT NULL GROUP BY SEMANA ORDER BY SEMANA
-            """
+            semana_query = f"SELECT SEMANA, COUNT(*) AS contagem FROM {self.table_id} WHERE SEMANA IS NOT NULL GROUP BY SEMANA ORDER BY SEMANA"
             df_registros_semana = pandas_gbq.read_gbq(semana_query, project_id=self.project_id, credentials=self.creds)
             if not df_registros_semana.empty:
                 df_registros_semana = df_registros_semana.set_index('SEMANA')
 
-            # --- NOVA CONSULTA 4: Top 5 escolas com mais pendências ---
             escolas_pendentes_query = f"""
-                SELECT ESCOLA, COUNT(*) as pendencias
-                FROM {self.table_id}
+                SELECT ESCOLA, COUNT(*) as pendencias FROM {self.table_id}
                 WHERE REGISTRO_DE_AULA IS NULL OR REGISTRO_DE_CONTEUDO IS NULL
-                GROUP BY ESCOLA
-                ORDER BY pendencias DESC
-                LIMIT 5
+                GROUP BY ESCOLA ORDER BY pendencias DESC LIMIT 5
             """
             df_escolas_pendentes = pandas_gbq.read_gbq(escolas_pendentes_query, project_id=self.project_id, credentials=self.creds)
 
-            # --- NOVA CONSULTA 5: Pendências por município ---
             municipios_pendentes_query = f"""
-                SELECT MUNICIPIO, COUNT(*) as pendencias
-                FROM {self.table_id}
+                SELECT MUNICIPIO, COUNT(*) as pendencias FROM {self.table_id}
                 WHERE REGISTRO_DE_AULA IS NULL OR REGISTRO_DE_CONTEUDO IS NULL
-                GROUP BY MUNICIPIO
-                HAVING pendencias > 0
-                ORDER BY pendencias DESC
+                GROUP BY MUNICIPIO HAVING pendencias > 0 ORDER BY pendencias DESC
             """
             df_municipios_pendentes = pandas_gbq.read_gbq(municipios_pendentes_query, project_id=self.project_id, credentials=self.creds)
 
-            # Combina todos os resultados em um único dicionário
+            # --- NOVA CONSULTA 6: Contagem total de escolas ÚNICAS com pendências ---
+            total_escolas_pendentes_query = f"""
+                SELECT COUNT(DISTINCT ESCOLA) as total_escolas
+                FROM {self.table_id}
+                WHERE REGISTRO_DE_AULA IS NULL OR REGISTRO_DE_CONTEUDO IS NULL
+            """
+            df_total_escolas = pandas_gbq.read_gbq(total_escolas_pendentes_query, project_id=self.project_id, credentials=self.creds)
+            total_escolas_com_pendencias = df_total_escolas['total_escolas'].iloc[0] if not df_total_escolas.empty else 0
+
+            # --- Dicionário de retorno ATUALIZADO ---
             return {
                 **stats_data,
                 "top_disciplinas": df_top_disciplinas,
                 "registros_por_semana": df_registros_semana,
-                "escolas_com_pendencias": df_escolas_pendentes,
-                "pendencias_por_municipio": df_municipios_pendentes
+                "escolas_com_pendencias": df_escolas_pendentes, # Para a tabela "Top 5"
+                "pendencias_por_municipio": df_municipios_pendentes,
+                "total_escolas_com_pendencias": total_escolas_com_pendencias # NOVO: Para o KPI
             }
 
         except Exception as e:
