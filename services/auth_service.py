@@ -48,3 +48,10 @@ def autenticar_usuario():
         st.link_button("Login com Google", auth_url, use_container_width=True, type="primary")
         st.info("ℹ️ Uma nova aba será aberta para o login. Após a autenticação, esta aba pode ser fechada.")
         st.stop()
+
+def logout_usuario():
+    """Limpa todas as informações da sessão para deslogar o usuário."""
+    # Itera sobre as chaves para evitar problemas de dicionário durante a iteração
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.rerun() # Força o recarregamento da página, que irá para a tela de login

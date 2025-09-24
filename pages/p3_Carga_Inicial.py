@@ -1,14 +1,12 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: p3_Carga_Inicial.py
-# Melhorada a lógica de exibição do tempo estimado na barra de progresso.
+# VERSÃO REVISADA: Padronizada a inicialização do serviço.
 # ==============================================================================
 
 import streamlit as st
 import pandas as pd
 import time
 from streamlit_autorefresh import st_autorefresh
-
-from app import bq_service
 from services import auth_service
 from services.bigquery_service import BigQueryService
 from utils.dataframe_utils import preparar_dataframe_para_bigquery
@@ -25,18 +23,23 @@ def formatar_tempo(segundos):
 st.set_page_config(layout="wide")
 st.title("Carga Inicial de Dados Históricos 🚚")
 
+# 1. Autenticação
 auth_service.autenticar_usuario()
 
 if 'user_info' not in st.session_state:
     st.info("Por favor, faça login com a sua conta Google para continuar.")
     st.stop()
 
-# --- Lógica da Aplicação (Visível apenas após o login) ---
+# --- Lógica Padrão de Sidebar, Mapeamento e Inicialização ---
 user_info = st.session_state.user_info
-user_email = user_info.get("email")
 user_name = user_info.get("name", "Usuário")
+with st.sidebar:
+    st.subheader(f"Olá, {user_name}!")
+    if st.button("Logout"):
+        auth_service.logout_usuario()
 
 try:
+    user_email = user_info.get("email")
     office_mapping = st.secrets.office_mapping
     if user_email in office_mapping:
         st.session_state.dataset_id = office_mapping[user_email]
@@ -44,21 +47,22 @@ try:
         st.error(f"ERRO: O e-mail '{user_email}' não está autorizado. Contate o administrador.")
         st.stop()
 except (AttributeError, KeyError):
-    st.error(
-        "ERRO DE CONFIGURAÇÃO: O mapeamento de escritórios [office_mapping] não foi encontrado nos Segredos do Streamlit.")
+    st.error("ERRO DE CONFIGURAÇÃO: O mapeamento [office_mapping] não foi encontrado.")
     st.stop()
 
-with st.sidebar:
-    st.subheader(f"Olá, {user_name}!")
-    if st.button("Logout", key="logout_Carga_Inicial"):
-        st.session_state.clear()
-        st.rerun()
+if 'bq_service' not in st.session_state:
+    st.session_state.bq_service = BigQueryService(
+        credentials=st.session_state.credentials,
+        dataset_id=st.session_state.dataset_id
+    )
+bq_service = st.session_state.bq_service
 
 # --- Keep-alive da sessão ---
 st_autorefresh(interval=5 * 60 * 1000, key="session_refresher_carga")
 
+# --- Lógica da Página ---
 st.warning(
-    "Use esta página apenas uma vez ou quando precisar substituir todos os dados no banco de dados. Esta operação apagará os dados existentes antes de carregar os novos.",
+    "Use esta página apenas uma vez ou para substituir todos os dados. Esta operação apagará os dados existentes antes de carregar os novos.",
     icon="⚠️")
 
 uploaded_file = st.file_uploader("Selecione o arquivo CSV completo com os dados históricos", type="csv")
@@ -75,34 +79,24 @@ if uploaded_file is not None:
             df['SEMANA'] = pd.to_numeric(df['SEMANA'], errors='coerce').fillna(0).astype(int)
             df = df.sort_values(by='SEMANA').reset_index(drop=True)
 
-            # --- LÓGICA DE UPLOAD EM PEDAÇOS COM BARRA DE PROGRESSO MELHORADA ---
             st.info("Iniciando o envio dos dados para o BigQuery em lotes...")
             progress_bar = st.progress(0, text="Preparando para o envio...")
             status_text = st.empty()
 
-            total_rows = len(df)
             chunk_size = 50000
-            chunks = [df[i:i + chunk_size] for i in range(0, total_rows, chunk_size)]
+            chunks = [df[i:i + chunk_size] for i in range(0, len(df), chunk_size)]
             total_chunks = len(chunks)
-
-            creds = st.session_state.credentials
-            dataset_id = st.session_state.dataset_id
             sucesso_geral = True
             tempo_inicio = time.time()
 
             for i, chunk in enumerate(chunks):
                 modo_de_carga = 'replace' if i == 0 else 'append'
 
-                # --- ALTERAÇÃO APLICADA AQUI: Lógica de exibição de tempo ---
                 progresso_atual = (i + 1) / total_chunks
                 tempo_decorrido = time.time() - tempo_inicio
-
-                # Calcula o tempo restante com base na média atual
                 tempo_medio_por_chunk = tempo_decorrido / (i + 1)
                 chunks_restantes = total_chunks - (i + 1)
                 tempo_restante_estimado = tempo_medio_por_chunk * chunks_restantes
-
-                # Monta um texto mais informativo para a barra de progresso
                 texto_progresso = (f"Enviando lote {i + 1}/{total_chunks} | "
                                    f"Tempo decorrido: {formatar_tempo(tempo_decorrido)} | "
                                    f"Restante est.: {formatar_tempo(tempo_restante_estimado)}")
@@ -117,8 +111,7 @@ if uploaded_file is not None:
                     sucesso_geral = False
                     st.error(f"Falha ao enviar o lote {i + 1}. A operação foi interrompida.")
                     break
-
-                time.sleep(0.01)
+                time.sleep(0.01)  # Pequena pausa para a UI atualizar suavemente
 
             progress_bar.empty()
             status_text.empty()
@@ -131,4 +124,3 @@ if uploaded_file is not None:
 
         except Exception as e:
             st.error(f"Ocorreu um erro durante a carga inicial: {e}")
-

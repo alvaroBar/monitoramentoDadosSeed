@@ -1,5 +1,5 @@
 # ==============================================================================
-# ARQUIVO DA PÁGINA PRINCIPAL: app.py (ou 0_Dashboard.py)
+# ARQUIVO DA PÁGINA PRINCIPAL: app.py
 # Versão final e unificada.
 # ==============================================================================
 
@@ -71,8 +71,7 @@ except (AttributeError, KeyError):
 with st.sidebar:
     st.subheader(f"Olá, {user_name}!")
     if st.button("Logout"):
-        st.session_state.clear()
-        st.rerun()
+        auth_service.logout_usuario()
 
 # --- Keep-alive da sessão ---
 st_autorefresh(interval=5 * 60 * 1000, key="session_refresher_dashboard")
