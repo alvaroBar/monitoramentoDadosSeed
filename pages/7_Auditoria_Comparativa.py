@@ -1,5 +1,5 @@
 # ==============================================================================
-# ARQUIVO DA PÁGINA: p7_Auditoria_Comparativa.py
+# ARQUIVO DA PÁGINA: 7_Auditoria_Comparativa.py
 # VERSÃO REVISADA: Arquitetura finalizada e padronizada.
 # ==============================================================================
 

@@ -1,5 +1,5 @@
 # ==============================================================================
-# ARQUIVO DA PÁGINA: p2_Carregar_Dados_BigQuery.py
+# ARQUIVO DA PÁGINA: 2_Carregar_Dados_BigQuery.py
 # VERSÃO REVISADA: Padronizada a inicialização e adicionado sidebar.
 # ==============================================================================
 

@@ -1,5 +1,5 @@
 # ==============================================================================
-# ARQUIVO DA PÁGINA: p6_Consultar_Dados.py
+# ARQUIVO DA PÁGINA: 6_Consultar_Dados.py
 # VERSÃO REVISADA: Padronizada a inicialização e código limpo.
 # ==============================================================================
 

@@ -1,5 +1,5 @@
 # ==============================================================================
-# ARQUIVO DA PÁGINA: p1_Extrair_Dados_PDF.py
+# ARQUIVO DA PÁGINA: 1_Extrair_Dados_PDF.py
 # VERSÃO REVISADA: Adicionado sidebar, logout e feedback de erro aprimorado.
 # ==============================================================================
 
