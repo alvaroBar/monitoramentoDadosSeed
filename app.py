@@ -1,46 +1,68 @@
-# app.py
 import streamlit as st
+import pandas as pd
 from services import auth_service
 from services.bigquery_service import BigQueryService
-from services.analysis_service import criar_analise_comparativa
-from utils.dataframe_utils import preparar_dataframe_para_bigquery
+from streamlit_autorefresh import st_autorefresh
 
-st.set_page_config(layout="wide")
-st.title("Meu App de Análise de Dados")
+st.set_page_config(
+    page_title="Dashboard de Acompanhamento",
+    layout="wide"
+)
 
-# 1. Autenticação é a primeira coisa
+# --- CSS customizado (pode manter ou remover) ---
+st.markdown("""
+<style>
+/* ... seu CSS ... */
+</style>
+""", unsafe_allow_html=True)
+
+# 1. Autenticação
 auth_service.autenticar_usuario()
 
-# Se chegou aqui, o usuário está autenticado.
-# As credenciais estão em st.session_state.credentials
+if 'user_info' not in st.session_state:
+    st.info("Por favor, faça login com a sua conta Google para continuar.")
+    st.stop()
 
-# 2. Inicializar os serviços com as credenciais
-# Você pode querer colocar isso no cache da sessão para não recriar a cada rerun
+# --- Lógica de Mapeamento CORRETA ---
+user_info = st.session_state.user_info
+user_email = user_info.get("email")
+user_name = user_info.get("name", "Usuário")
+
+try:
+    office_mapping = st.secrets.office_mapping
+    if user_email in office_mapping:
+        st.session_state.dataset_id = office_mapping[user_email]
+    else:
+        st.error(f"ERRO: O e-mail '{user_email}' não está autorizado. Contate o administrador.")
+        st.stop()
+except (AttributeError, KeyError):
+    st.error("ERRO DE CONFIGURAÇÃO: O mapeamento [office_mapping] não foi encontrado nos Segredos do Streamlit.")
+    st.stop()
+
+with st.sidebar:
+    st.subheader(f"Olá, {user_name}!")
+    if st.button("Logout"):
+        st.session_state.clear()
+        st.rerun()
+
+# --- Inicialização CORRETA do Serviço ---
 if 'bq_service' not in st.session_state:
-    DATASET_ID = "seu_dataset_aqui" # Pode vir de um selectbox ou config
     st.session_state.bq_service = BigQueryService(
         credentials=st.session_state.credentials,
-        dataset_id=DATASET_ID
+        dataset_id=st.session_state.dataset_id # Agora usa o dataset_id correto
     )
-
 bq_service = st.session_state.bq_service
 
-# 3. Construir a UI e chamar os serviços
-st.header("Dashboard")
-stats = bq_service.get_dashboard_stats()
-# ... exibir as estatísticas ...
 
-st.header("Análise Comparativa")
-# ... widgets para upload de arquivo e seleção de semanas ...
-if st.button("Executar Análise"):
-    # Supondo que df_parquet e weeks foram preenchidos pela UI
-    sucesso, mensagem = criar_analise_comparativa(
-        bq_service,
-        "Nome da Analise",
-        weeks,
-        df_parquet
-    )
-    if sucesso:
-        st.success(mensagem)
-    else:
-        st.error(mensagem)
+# --- Conteúdo do Dashboard ---
+st.title("Dashboard de Acompanhamento LRCO")
+
+with st.spinner("A carregar estatísticas..."):
+    # Agora a chamada ao método funcionará corretamente
+    stats = bq_service.get_dashboard_stats()
+
+if stats:
+    # ... O resto da sua lógica para exibir os cartões e gráficos ...
+    pass
+else:
+    st.info("Ainda não há dados lançados para este escritório.")
