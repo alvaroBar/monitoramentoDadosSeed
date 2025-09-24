@@ -1,6 +1,6 @@
 # ==============================================================================
-# ARQUIVO DA PÁGINA: 7_Auditoria_Comparativa.py
-# VERSÃO REVISADA: Arquitetura finalizada e padronizada.
+# ARQUIVO DA PÁGINA: p7_Auditoria_Comparativa.py
+# VERSÃO FINAL: Inclui a nova "Auditoria de Validação" e mantém a funcionalidade original.
 # ==============================================================================
 
 import streamlit as st
@@ -11,9 +11,9 @@ from services.bigquery_service import BigQueryService
 from services import analysis_service
 
 st.set_page_config(layout="wide")
-st.title("Auditoria Comparativa de Pendências 🔍")
+st.title("Auditoria e Validação 🔬")
 
-# 1. Autenticação e inicialização padrão
+# --- Bloco de Inicialização Padrão ---
 auth_service.autenticar_usuario()
 
 if 'user_info' not in st.session_state:
@@ -33,10 +33,10 @@ try:
     if user_email in office_mapping:
         st.session_state.dataset_id = office_mapping[user_email]
     else:
-        st.error(f"ERRO: O e-mail '{user_email}' não está autorizado. Contate o administrador.")
+        st.error(f"ERRO: O e-mail '{user_email}' não está autorizado.");
         st.stop()
 except (AttributeError, KeyError):
-    st.error("ERRO DE CONFIGURAÇÃO: O mapeamento [office_mapping] não foi encontrado.")
+    st.error("ERRO DE CONFIGURAÇÃO: O mapeamento [office_mapping] não foi encontrado.");
     st.stop()
 
 if 'bq_service' not in st.session_state:
@@ -45,68 +45,110 @@ if 'bq_service' not in st.session_state:
         dataset_id=st.session_state.dataset_id
     )
 bq_service = st.session_state.bq_service
-
-# --- Keep-alive da sessão ---
 st_autorefresh(interval=10 * 60 * 1000, key="session_refresher_auditoria")
 
-# --- Lógica da Página ---
+# --- Seção de Geração de Análise ---
 st.info(
     "**Fluxo de Trabalho:**\n"
     "1. Na página `p1`, processe os PDFs e baixe o arquivo `.parquet`.\n"
-    "2. Volte aqui, faça o upload do arquivo, selecione as semanas e gere o relatório."
+    "2. Volte aqui, escolha o tipo de análise, faça o upload do arquivo, selecione as semanas e gere o relatório."
 )
 st.markdown("---")
 
-# --- Seção 1: Criar uma Auditoria Comparativa ---
-with st.expander("➕ Gerar Nova Auditoria de Pendências", expanded=True):
-    analysis_name = st.text_input("1. Dê um nome para a Auditoria", placeholder="Ex: Verificação Semanas 30-35")
-    uploaded_parquet = st.file_uploader("2. Carregue o arquivo `dados_extraidos.parquet`", type=["parquet"])
+with st.expander("➕ Gerar Nova Análise", expanded=True):
+    tipo_auditoria = st.radio(
+        "1. Escolha o tipo de análise:",
+        options=["Análise de Pendências Históricas (Salva Relatório)", "Validação de Lançamentos (Análise Rápida)"],
+        horizontal=True,
+    )
 
-    st.write("3. Selecione as semanas do histórico para comparar.")
+    analysis_name = st.text_input("2. Dê um nome para a análise (obrigatório para salvar relatório)",
+                                  placeholder="Ex: Verificação Semanas 30-35")
+    uploaded_parquet = st.file_uploader("3. Carregue o arquivo `dados_extraidos.parquet`", type=["parquet"])
+
+    st.write("4. Selecione as semanas do histórico para comparar.")
     with st.spinner("Carregando semanas disponíveis..."):
         available_weeks = bq_service.get_available_weeks()
+    selected_weeks = st.multiselect("Semanas:", options=available_weeks if available_weeks else [])
 
-    if available_weeks:
-        selected_weeks = st.multiselect("Semanas:", options=available_weeks)
-    else:
-        st.warning("Não há semanas no histórico para comparar.")
-        selected_weeks = []
+    if st.button("Executar Análise", use_container_width=True, type="primary"):
+        if 'validation_results' in st.session_state:
+            del st.session_state.validation_results
 
-    if st.button("Gerar Relatório de Pendências", use_container_width=True, type="primary"):
-        if not analysis_name:
-            st.error("Por favor, forneça um nome para a auditoria.")
-        elif not uploaded_parquet:
+        if not uploaded_parquet:
             st.error("Por favor, carregue o arquivo .parquet.")
         elif not selected_weeks:
             st.error("Por favor, selecione pelo menos uma semana.")
         else:
-            with st.spinner("Iniciando processo de auditoria..."):
+            with st.spinner("Processando... Esta operação pode levar alguns instantes."):
                 try:
                     df_from_parquet = pd.read_parquet(uploaded_parquet)
                     if df_from_parquet.empty:
                         st.error("O arquivo Parquet está vazio.")
                     else:
-                        sucesso, mensagem = analysis_service.criar_analise_comparativa(
-                            bq_service, analysis_name, selected_weeks, df_from_parquet
-                        )
-                        if sucesso:
-                            st.success(mensagem)
-                            st.balloons()
-                        else:
-                            st.error(mensagem)
+                        if tipo_auditoria == "Análise de Pendências Históricas (Salva Relatório)":
+                            if not analysis_name:
+                                st.error("O nome da análise é obrigatório para salvar o relatório.")
+                            else:
+                                sucesso, mensagem = analysis_service.criar_analise_comparativa(bq_service,
+                                                                                               analysis_name,
+                                                                                               selected_weeks,
+                                                                                               df_from_parquet)
+                                if sucesso:
+                                    st.success(mensagem);
+                                    st.balloons()
+                                else:
+                                    st.error(mensagem)
+
+                        elif tipo_auditoria == "Validação de Lançamentos (Análise Rápida)":
+                            sucesso, resultados = analysis_service.executar_validacao_de_lancamentos(bq_service,
+                                                                                                     selected_weeks,
+                                                                                                     df_from_parquet)
+                            if sucesso:
+                                st.session_state.validation_results = resultados
+                            else:
+                                st.error(resultados)
+
                 except Exception as e:
-                    st.error(f"Ocorreu um erro inesperado durante a auditoria: {e}")
+                    st.error(f"Ocorreu um erro inesperado: {e}")
 
+# --- Seção de Resultados da Validação Rápida ---
+if 'validation_results' in st.session_state:
+    st.markdown("---")
+    st.header("Resultados da Validação de Lançamentos")
+
+    resultados = st.session_state.validation_results
+
+    col1, col2 = st.columns(2)
+    col1.metric("Registros Correspondentes (Matches)", resultados.get("total_matches", 0))
+    col2.metric("Registros Corrigidos (Nulos Preenchidos)", resultados.get("nulos_preenchidos", 0))
+
+    df_pendencias = resultados.get("pendencias_restantes", pd.DataFrame())
+
+    st.subheader(f"Pendências Restantes ({len(df_pendencias)})")
+    st.info(
+        "A tabela abaixo mostra os registros das semanas selecionadas que ainda possuem pendências, limitando-se apenas às escolas presentes no seu novo arquivo.")
+
+    if not df_pendencias.empty:
+        csv_data = df_pendencias.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Baixar Pendências Restantes como CSV", csv_data, "pendencias_restantes.csv", "text/csv",
+                           use_container_width=True)
+        st.dataframe(df_pendencias, use_container_width=True, hide_index=True)
+    else:
+        st.success("🎉 Nenhuma pendência restante encontrada para as escolas do arquivo analisado!")
+
+    if st.button("Limpar Resultados da Validação"):
+        del st.session_state.validation_results
+        st.rerun()
+
+# --- Seção de Visualização de Relatórios Salvos ---
 st.markdown("---")
-
-# --- Seção 2: Visualizar Relatórios de Auditoria Gerados ---
-st.header("Visualizar Auditorias Salvas")
-
+st.header("Visualizar Relatórios de Pendências Salvas")
 with st.spinner("Buscando auditorias existentes..."):
     analysis_tables = bq_service.list_analysis_tables()
 
 if not analysis_tables:
-    st.info("Nenhuma auditoria foi criada ainda.")
+    st.info("Nenhuma auditoria salva foi criada ainda.")
 else:
     table_options = ["Selecione uma auditoria para visualizar..."] + sorted(analysis_tables)
     selected_table = st.selectbox("Auditorias Disponíveis:", options=table_options)
@@ -133,28 +175,22 @@ else:
             if not df_details.empty:
                 st.markdown("---")
                 st.subheader("Detalhes das Pendências")
-
-                if not df_details.empty:
-                    csv_data = df_details.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label=f"📥 Baixar detalhes como CSV",
-                        data=csv_data,
-                        file_name=f"{selected_table}_detalhes.csv",
-                        mime="text/csv",
-                        use_container_width=True
-                    )
-                    st.dataframe(
-                        df_details,
-                        use_container_width=True,
-                        hide_index=True,
-                        column_config={
-                            "DATA_DO_RELATORIO": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
-                            "HORARIO": st.column_config.TimeColumn("Horário", format="HH:mm"),
-                            "PENDENCIA_AULA": st.column_config.TextColumn("Aula Pendente?"),
-                            "PENDENCIA_CONTEUDO": st.column_config.TextColumn("Conteúdo Pendente?")
-                        }
-                    )
-                else:
-                    st.success("🎉 Não foram encontrados registros com pendências nesta auditoria.")
+                csv_data = df_details.to_csv(index=False).encode('utf-8')
+                st.download_button(label="📥 Baixar detalhes como CSV", data=csv_data,
+                                   file_name=f"{selected_table}_detalhes.csv", mime="text/csv",
+                                   use_container_width=True)
+                st.dataframe(
+                    df_details,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "DATA_DO_RELATORIO": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
+                        "HORARIO": st.column_config.TimeColumn("Horário", format="HH:mm"),
+                        "PENDENCIA_AULA": st.column_config.TextColumn("Aula Pendente?"),
+                        "PENDENCIA_CONTEUDO": st.column_config.TextColumn("Conteúdo Pendente?")
+                    }
+                )
+            else:
+                st.success("🎉 Todos os registros nesta auditoria estão completos.")
         else:
             st.warning("Formato de relatório de auditoria desconhecido.")
