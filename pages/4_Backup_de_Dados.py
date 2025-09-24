@@ -47,7 +47,7 @@ if 'bq_service' not in st.session_state:
 bq_service = st.session_state.bq_service
 
 # --- Keep-alive da sessão ---
-st_autorefresh(interval=5 * 60 * 1000, key="session_refresher_backup")
+st_autorefresh(interval=10 * 60 * 1000, key="session_refresher_backup")
 
 # --- Lógica da Página ---
 if 'backup_data' not in st.session_state:

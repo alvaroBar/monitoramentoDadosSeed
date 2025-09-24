@@ -9,8 +9,8 @@ import re
 import time
 import pdfplumber
 import gc
-from services import auth_service # Importado para login e logout
-
+from services import auth_service
+from streamlit_autorefresh import st_autorefresh
 st.set_page_config(
     page_title="1. Extrair Dados (PDF)",
     page_icon="📄",
@@ -36,6 +36,7 @@ else:
     # o botão de login e para a execução, então não é preciso fazer mais nada aqui.
     pass
 
+st_autorefresh(interval=10 * 60 * 1000, key="refresher_extração_dados")
 
 def extrair_dados_de_pdf(arquivo_pdf, disciplinas_validas):
     """Extrai dados de um arquivo PDF e retorna um DataFrame."""

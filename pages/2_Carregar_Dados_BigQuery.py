@@ -5,6 +5,8 @@
 
 import streamlit as st
 import pandas as pd
+from streamlit_autorefresh import st_autorefresh
+
 from services import auth_service
 from services.bigquery_service import BigQueryService
 from utils.dataframe_utils import preparar_dataframe_para_bigquery
@@ -40,6 +42,7 @@ except (AttributeError, KeyError):
     st.error("ERRO DE CONFIGURAÇÃO: O mapeamento [office_mapping] não foi encontrado.")
     st.stop()
 
+st_autorefresh(interval=10 * 60 * 1000, key="refresher_carregador_bigQuerry")
 # 3. Inicialização Padrão do Serviço
 if 'bq_service' not in st.session_state:
     st.session_state.bq_service = BigQueryService(
