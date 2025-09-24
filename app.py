@@ -10,9 +10,12 @@ from services.bigquery_service import BigQueryService
 from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(
-    page_title="Dashboard de Acompanhamento",
+    page_title="Dashboard",
+    page_icon="📊",
     layout="wide"
 )
+
+st.title("📊 Dashboard")
 
 # --- CSS customizado para os cartões de métrica ---
 st.markdown("""

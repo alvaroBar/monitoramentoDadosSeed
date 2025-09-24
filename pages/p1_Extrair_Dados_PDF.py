@@ -11,8 +11,13 @@ import pdfplumber
 import gc
 from services import auth_service # Importado para login e logout
 
-st.set_page_config(layout="wide")
-st.title("Passo 1: Extrair Dados dos Relatórios PDF 📄")
+st.set_page_config(
+    page_title="1. Extrair Dados (PDF)",
+    page_icon="📄",
+    layout="wide"
+)
+
+st.title("📄 1. Extrair Dados (PDF)")
 
 # --- Autenticação e Sidebar ---
 # Adicionado para consistência da interface e funcionalidade de logout
