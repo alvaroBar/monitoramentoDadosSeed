@@ -119,6 +119,12 @@ if 'validation_results' in st.session_state:
 
     resultados = st.session_state.validation_results
 
+    # NOVO: Exibe as escolas que foram auditadas
+    escolas_auditadas = resultados.get("escolas_auditadas", [])
+    with st.expander(f"Análise focada em {len(escolas_auditadas)} escola(s). Clique para ver a lista."):
+        for escola in escolas_auditadas:
+            st.write(f"- {escola}")
+
     col1, col2 = st.columns(2)
     col1.metric("Registros Correspondentes (Matches)", resultados.get("total_matches", 0))
     col2.metric("Registros Corrigidos (Nulos Preenchidos)", resultados.get("nulos_preenchidos", 0))
@@ -126,8 +132,6 @@ if 'validation_results' in st.session_state:
     df_pendencias = resultados.get("pendencias_restantes", pd.DataFrame())
 
     st.subheader(f"Pendências Restantes ({len(df_pendencias)})")
-    st.info(
-        "A tabela abaixo mostra os registros das semanas selecionadas que ainda possuem pendências, limitando-se apenas às escolas presentes no seu novo arquivo.")
 
     if not df_pendencias.empty:
         csv_data = df_pendencias.to_csv(index=False).encode('utf-8')

@@ -169,12 +169,22 @@ class BigQueryService:
             st.error(f"Erro ao executar a consulta no BigQuery: {e}")
             return pd.DataFrame()
 
-    def get_all_data(self, week_filter=None):
-        """Busca todos os dados da tabela histórica, com um filtro opcional por semana."""
+    def get_all_data(self, week_filter=None, school_filter=None):
+        """Busca todos os dados, com filtros opcionais por semana e/ou escola."""
         sql_query = f"SELECT * FROM {self.table_id}"
+        where_clauses = []
+
         if week_filter:
             weeks_str = ','.join(map(str, week_filter))
-            sql_query += f" WHERE SEMANA IN ({weeks_str})"
+            where_clauses.append(f"SEMANA IN ({weeks_str})")
+
+        if school_filter:
+            escolas_str = self._format_sql_in_clause(school_filter)
+            where_clauses.append(f"ESCOLA IN {escolas_str}")
+
+        if where_clauses:
+            sql_query += " WHERE " + " AND ".join(where_clauses)
+
         try:
             return pandas_gbq.read_gbq(sql_query, project_id=self.project_id, credentials=self.creds)
         except Exception as e:
@@ -236,10 +246,15 @@ class BigQueryService:
             st.error(f"Erro ao buscar semanas disponíveis: {e}")
             return []
 
-    def get_pending_historical_data(self, weeks):
-        """Busca dados históricos que estão com pendências."""
+    def get_pending_historical_data(self, weeks, schools=None):
+        """Busca dados históricos pendentes, com filtro opcional por escolas."""
         weeks_str = ','.join(map(str, weeks))
         query = f"SELECT * FROM {self.table_id} WHERE SEMANA IN ({weeks_str}) AND (REGISTRO_DE_AULA IS NULL OR REGISTRO_DE_CONTEUDO IS NULL)"
+
+        if schools:
+            escolas_str = self._format_sql_in_clause(schools)
+            query += f" AND ESCOLA IN {escolas_str}"
+
         try:
             return pandas_gbq.read_gbq(query, project_id=self.project_id, credentials=self.creds)
         except Exception as e:
