@@ -81,14 +81,18 @@ def extrair_dados_de_pdf(arquivo_pdf, disciplinas_validas):
                     pos_registro = linha.find(registros[0]) if registros else len(linha)
                     disciplina_raw = linha[pos_fim_horario:pos_registro].strip()
 
-                    if disciplina_encontrada := next((d for d in disciplinas_validas if d in disciplina_raw.upper()), None):
+                    # --- LÓGICA CORRIGIDA AQUI ---
+                    # Encontra todas as disciplinas válidas que são substrings do texto extraído
+                    matches = [d for d in disciplinas_validas if d in disciplina_raw.upper()]
+
+                    if matches:
+                        # Se encontrou uma ou mais correspondências, escolhe a mais longa (mais específica)
+                        disciplina_encontrada = max(matches, key=len)
                         dados_extraidos.append([
                             data_relatorio, municipio, nome_escola, turma_atual, horario,
                             disciplina_encontrada, registro_aula, registro_conteudo
                         ])
     except Exception as e:
-        # --- SUGESTÃO APLICADA AQUI ---
-        # Exibe um aviso na tela informando o usuário sobre o arquivo problemático
         st.warning(f"Atenção: Ocorreu um erro ao processar o arquivo '{arquivo_pdf.name}'. Este arquivo será ignorado. (Erro: {e})")
         return pd.DataFrame()
 
