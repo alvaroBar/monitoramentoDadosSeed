@@ -126,52 +126,45 @@ if 'validation_results' in st.session_state:
 
     col1, col2 = st.columns(2)
     col1.metric("Registros Correspondentes (Matches)", resultados.get("total_matches", 0))
-    col2.metric("Registros Corrigidos (Nulos Preenchidos)", resultados.get("nulos_preenchidos", 0))
+    col2.metric("Registros Corrigidos (Nulos Preenchentos)", resultados.get("nulos_preenchidos", 0))
 
     df_pendencias = resultados.get("pendencias_restantes", pd.DataFrame())
 
     st.subheader(f"Pendências Restantes ({len(df_pendencias)})")
 
     if not df_pendencias.empty:
-        # --- LÓGICA DE ESTILIZAÇÃO APLICADA AQUI ---
+        # --- LÓGICA DE ESTILIZAÇÃO CORRIGIDA E MAIS ROBUSTA ---
 
-        # 1. Prepara uma cópia do DataFrame para o download em CSV
+        # 1. Prepara o DataFrame para o download em CSV (sem alteração)
         df_for_csv = df_pendencias.copy()
-        df_for_csv['REGISTRO_DE_AULA'] = pd.to_datetime(df_for_csv['REGISTRO_DE_AULA']).dt.strftime(
-            '%Y-%m-%d %H:%M:%S').fillna("Sem registro")
-        df_for_csv['REGISTRO_DE_CONTEUDO'] = pd.to_datetime(df_for_csv['REGISTRO_DE_CONTEUDO']).dt.strftime(
-            '%Y-%m-%d %H:%M:%S').fillna("Sem registro")
-
+        for col in ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']:
+            df_for_csv[col] = pd.to_datetime(df_for_csv[col]).dt.strftime('%Y-%m-%d %H:%M:%S').fillna("Sem registro")
         csv_data = df_for_csv.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Baixar Pendências Restantes como CSV", csv_data, "pendencias_restantes.csv", "text/csv",
-                           use_container_width=True)
+        st.download_button("📥 Baixar Pendências Restantes como CSV", csv_data, "pendencias_restantes.csv", "text/csv", use_container_width=True)
 
+        # 2. Prepara um DataFrame para EXIBIÇÃO
+        df_for_display = df_pendencias.copy()
+        # Primeiro, converte as datas válidas para string no formato desejado
+        for col in ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']:
+            df_for_display[col] = pd.to_datetime(df_for_display[col]).dt.strftime('%d/%m/%Y %H:%M:%S')
+        # Agora, preenche os valores nulos restantes (que viraram NaT/NaN) com o texto
+        df_for_display.fillna("Sem registro", inplace=True)
 
-        # 2. Define a função de estilo para destacar nulos
-        def highlight_nulls(s):
-            is_null = pd.isna(s)
-            return ['color: red' if v else '' for v in is_null]
+        # 3. Define uma função de estilo mais simples que reage ao TEXTO
+        def highlight_sem_registro(cell_value):
+            return 'color: red' if cell_value == "Sem registro" else ''
 
+        # 4. Aplica o estilo ao DataFrame de exibição
+        styled_df = df_for_display.style.applymap(highlight_sem_registro, subset=['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO'])
 
-        # 3. Formata e estiliza o DataFrame para exibição
-        styled_df = df_pendencias.style.apply(highlight_nulls, subset=['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']) \
-            .format({
-            "REGISTRO_DE_AULA": lambda x: "Sem registro" if pd.isna(x) else pd.to_datetime(x).strftime(
-                '%d/%m/%Y %H:%M:%S'),
-            "REGISTRO_DE_CONTEUDO": lambda x: "Sem registro" if pd.isna(x) else pd.to_datetime(x).strftime(
-                '%d/%m/%Y %H:%M:%S')
-        })
-
-        # 4. Exibe o DataFrame estilizado
+        # 5. Exibe o DataFrame estilizado
         st.dataframe(
             styled_df,
             use_container_width=True,
             hide_index=True,
             column_config={
                 "DATA_DO_RELATORIO": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
-                "HORARIO": st.column_config.TimeColumn("Horário", format="HH:mm"),
-                "REGISTRO_DE_AULA": "Registro da Aula",
-                "REGISTRO_DE_CONTEUDO": "Registro do Conteúdo"
+                "HORARIO": st.column_config.TimeColumn("Horário", format="HH:mm")
             }
         )
     else:
