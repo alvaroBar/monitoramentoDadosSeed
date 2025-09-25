@@ -6,6 +6,7 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import io
 from streamlit_autorefresh import st_autorefresh
 from services import auth_service
 from services.bigquery_service import BigQueryService
