@@ -108,9 +108,9 @@ if 'search_results' in st.session_state and st.session_state.get('submitted_form
     if not df_results.empty:
         st.success(f"{len(df_results)} registros encontrados.")
 
-        # --- LÓGICA DE ESTILIZAÇÃO ROBUSTA APLICADA AQUI ---
+        # --- LÓGICA DE ESTILIZAÇÃO ROBUSTA (VERSÃO 2) ---
 
-        # 1. Prepara uma cópia do DataFrame para o download em CSV
+        # 1. Prepara uma cópia para o download em CSV (sem alteração)
         df_for_csv = df_results.copy()
         for col in ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']:
             df_for_csv[col] = pd.to_datetime(df_for_csv[col]).dt.strftime('%Y-%m-%d %H:%M:%S').fillna("Sem registro")
@@ -124,21 +124,29 @@ if 'search_results' in st.session_state and st.session_state.get('submitted_form
             use_container_width=True
         )
 
-        # 2. Prepara um DataFrame para EXIBIÇÃO
+        # 2. Prepara um DataFrame para EXIBIÇÃO de forma mais segura
         df_for_display = df_results.copy()
-        # Primeiro, converte as datas válidas para string no formato desejado
+
+
+        def formatar_e_preencher(valor):
+            """Função para formatar data/hora ou retornar 'Sem registro' se for nulo."""
+            if pd.isna(valor):
+                return "Sem registro"
+            # Converte para datetime e formata. Adiciona-se tz=None para evitar problemas de fuso horário.
+            return pd.to_datetime(valor).tz_localize(None).strftime('%d/%m/%Y %H:%M:%S')
+
+
+        # Aplica a função de formatação segura
         for col in ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']:
-            df_for_display[col] = pd.to_datetime(df_for_display[col]).dt.strftime('%d/%m/%Y %H:%M:%S')
-        # Agora, preenche os valores nulos restantes (que viraram NaT/NaN) com o texto
-        df_for_display.fillna("Sem registro", inplace=True)
+            df_for_display[col] = df_for_display[col].apply(formatar_e_preencher)
 
 
-        # 3. Define uma função de estilo que reage ao TEXTO "Sem registro"
+        # 3. Define a função de estilo que reage ao TEXTO
         def highlight_sem_registro(cell_value):
             return 'color: red' if cell_value == "Sem registro" else ''
 
 
-        # 4. Aplica o estilo ao DataFrame de exibição
+        # 4. Aplica o estilo ao DataFrame de exibição já formatado
         styled_df = df_for_display.style.applymap(highlight_sem_registro,
                                                   subset=['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO'])
 
