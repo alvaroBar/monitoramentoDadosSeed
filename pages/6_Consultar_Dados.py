@@ -1,6 +1,6 @@
 # ==============================================================================
-# ARQUIVO DA PÁGINA: 6_Consultar_Dados.py
-# VERSÃO REVISADA: Padronizada a inicialização e código limpo.
+# ARQUIVO DA PÁGINA: p6_Consultar_Dados.py
+# VERSÃO REVISADA: Adicionada estilização condicional para destacar pendências.
 # ==============================================================================
 
 import streamlit as st
@@ -71,24 +71,20 @@ with st.form(key="search_form"):
             options=["Não filtrar", "Falta Registo da Aula", "Falta Registo do Conteúdo", "Falta um ou ambos"]
         )
 
-    min_date = pd.to_datetime(opcoes_filtro.get("min_data")).date() if opcoes_filtro.get("min_data") else datetime.date(2020, 1, 1)
-    max_date = pd.to_datetime(opcoes_filtro.get("max_data")).date() if opcoes_filtro.get("max_data") else datetime.date.today()
+    min_date = pd.to_datetime(opcoes_filtro.get("min_data")).date() if opcoes_filtro.get("min_data") else datetime.date(
+        2020, 1, 1)
+    max_date = pd.to_datetime(opcoes_filtro.get("max_data")).date() if opcoes_filtro.get(
+        "max_data") else datetime.date.today()
     filtro_data = st.date_input("Intervalo de Data do Relatório", value=[], min_value=min_date, max_value=max_date)
 
     submitted = st.form_submit_button("Buscar no Banco de Dados", use_container_width=True, type="primary")
 
 if submitted:
-    null_filter_map = {
-        "Falta Registo da Aula": "aula",
-        "Falta Registo do Conteúdo": "conteudo",
-        "Falta um ou ambos": "ambos"
-    }
+    null_filter_map = {"Falta Registo da Aula": "aula", "Falta Registo do Conteúdo": "conteudo",
+                       "Falta um ou ambos": "ambos"}
     filters = {
-        "semanas": filtro_semanas,
-        "municipios": filtro_municipios,
-        "escolas": filtro_escolas,
-        "disciplinas": filtro_disciplinas,
-        "turmas": filtro_turmas,
+        "semanas": filtro_semanas, "municipios": filtro_municipios, "escolas": filtro_escolas,
+        "disciplinas": filtro_disciplinas, "turmas": filtro_turmas,
         "data_inicio": filtro_data[0] if len(filtro_data) == 2 else None,
         "data_fim": filtro_data[1] if len(filtro_data) == 2 else None,
         "null_filter": null_filter_map.get(filtro_nulos_opcao)
@@ -109,7 +105,17 @@ if 'search_results' in st.session_state and st.session_state.get('submitted_form
 
     if not df_results.empty:
         st.success(f"{len(df_results)} registros encontrados.")
-        csv_data = df_results.to_csv(index=False).encode('utf-8')
+
+        # --- ALTERAÇÃO APLICADA AQUI ---
+
+        # 1. Prepara uma cópia do DataFrame para o download em CSV
+        df_for_csv = df_results.copy()
+        df_for_csv['REGISTRO_DE_AULA'] = pd.to_datetime(df_for_csv['REGISTRO_DE_AULA']).dt.strftime(
+            '%Y-%m-%d %H:%M:%S').fillna("Sem registro")
+        df_for_csv['REGISTRO_DE_CONTEUDO'] = pd.to_datetime(df_for_csv['REGISTRO_DE_CONTEUDO']).dt.strftime(
+            '%Y-%m-%d %H:%M:%S').fillna("Sem registro")
+
+        csv_data = df_for_csv.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Baixar resultados como CSV",
             data=csv_data,
@@ -117,12 +123,32 @@ if 'search_results' in st.session_state and st.session_state.get('submitted_form
             mime="text/csv",
             use_container_width=True
         )
+
+
+        # 2. Define a função de estilo para destacar nulos
+        def highlight_nulls(s):
+            is_null = pd.isna(s)
+            return ['color: red' if v else '' for v in is_null]
+
+
+        # 3. Formata e estiliza o DataFrame para exibição
+        styled_df = df_results.style.apply(highlight_nulls, subset=['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']) \
+            .format({
+            "REGISTRO_DE_AULA": lambda x: "Sem registro" if pd.isna(x) else pd.to_datetime(x).strftime(
+                '%d/%m/%Y %H:%M:%S'),
+            "REGISTRO_DE_CONTEUDO": lambda x: "Sem registro" if pd.isna(x) else pd.to_datetime(x).strftime(
+                '%d/%m/%Y %H:%M:%S')
+        })
+
+        # 4. Exibe o DataFrame estilizado
         st.dataframe(
-            df_results,
+            styled_df,
             column_config={
                 "DATA_DO_RELATORIO": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
-                "REGISTRO_DE_AULA": st.column_config.DatetimeColumn("Registro da Aula", format="DD/MM/YYYY HH:mm"),
-                "REGISTRO_DE_CONTEUDO": st.column_config.DatetimeColumn("Registro do Conteúdo", format="DD/MM/YYYY HH:mm"),
+                "HORARIO": st.column_config.TimeColumn("Horário", format="HH:mm"),
+                # As colunas estilizadas agora são tratadas como texto
+                "REGISTRO_DE_AULA": "Registro da Aula",
+                "REGISTRO_DE_CONTEUDO": "Registro do Conteúdo"
             },
             use_container_width=True,
             hide_index=True
