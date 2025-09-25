@@ -78,7 +78,10 @@ def criar_analise_comparativa(bq_service: BigQueryService, analysis_name: str, w
         return False, f"Erro ao criar a análise comparativa: {e}"
 
 
-def executar_validacao_de_lancamentos(bq_service: BigQueryService, weeks_to_compare: list, df_from_parquet: pd.DataFrame):
+# services/analysis_service.py -> SUBSTITUA A FUNÇÃO INTEIRA POR ESTA
+
+def executar_validacao_de_lancamentos(bq_service: BigQueryService, weeks_to_compare: list,
+                                      df_from_parquet: pd.DataFrame):
     """
     Compara um arquivo Parquet com dados do BigQuery para validar lançamentos.
     Retorna métricas e uma lista de pendências restantes.
@@ -96,29 +99,42 @@ def executar_validacao_de_lancamentos(bq_service: BigQueryService, weeks_to_comp
         # 3. Identificar as colunas chave para o merge
         key_cols = ['DATA_DO_RELATORIO', 'MUNICIPIO', 'ESCOLA', 'TURMA', 'HORARIO', 'DISCIPLINA']
 
-        # 4. Fazer o merge para encontrar correspondências (matches)
-        df_merged = pd.merge(
-            df_historico,
-            df_novo,
-            on=key_cols,
-            how='inner', # 'inner' merge nos dá apenas os registros que existem em ambos
-            suffixes=('_db', '_novo')
-        )
-        total_matches = len(df_merged)
+        # 4. Fazer o merge 'inner' para encontrar correspondências (matches)
+        df_merged_inner = pd.merge(df_historico, df_novo, on=key_cols, how='inner', suffixes=('_db', '_novo'))
+        total_matches = len(df_merged_inner)
+
+        # Se não houver matches, não há o que validar.
         if total_matches == 0:
             return False, "Nenhum registro correspondente (match) encontrado entre o arquivo e os dados do BigQuery."
 
-        # 5. Calcular quantos valores nulos foram preenchidos
-        aulas_preenchidas = df_merged.query("REGISTRO_DE_AULA_db.isnull() and REGISTRO_DE_AULA_novo.notnull()").shape[0]
-        conteudos_preenchidos = df_merged.query("REGISTRO_DE_CONTEUDO_db.isnull() and REGISTRO_DE_CONTEUDO_novo.notnull()").shape[0]
+        # 5. Calcular quantos valores nulos foram preenchidos nos registros que deram match
+        aulas_preenchidas = \
+        df_merged_inner.query("REGISTRO_DE_AULA_db.isnull() and REGISTRO_DE_AULA_novo.notnull()").shape[0]
+        conteudos_preenchidos = \
+        df_merged_inner.query("REGISTRO_DE_CONTEUDO_db.isnull() and REGISTRO_DE_CONTEUDO_novo.notnull()").shape[0]
         total_preenchido = aulas_preenchidas + conteudos_preenchidos
 
-        # 6. Encontrar pendências restantes nas escolas do arquivo novo
-        escolas_no_arquivo_novo = df_novo['ESCOLA'].unique()
-        df_pendencias_restantes = df_historico[
-            (df_historico['ESCOLA'].isin(escolas_no_arquivo_novo)) &
-            (df_historico['REGISTRO_DE_AULA'].isnull() | df_historico['REGISTRO_DE_CONTEUDO'].isnull())
-        ]
+        # --- LÓGICA DE PENDÊNCIAS RESTANTES CORRIGIDA ---
+        # 6. Encontrar pendências REAIS restantes, usando a mesma lógica da outra auditoria
+        # Primeiro, filtre o histórico para pegar apenas o que estava pendente
+        df_historico_pendente = df_historico[
+            df_historico['REGISTRO_DE_AULA'].isnull() | df_historico['REGISTRO_DE_CONTEUDO'].isnull()
+            ].copy()
+
+        # Faça um merge 'left' para ver quais pendências foram preenchidas pelo arquivo novo
+        df_merged_pendencias = pd.merge(
+            df_historico_pendente,
+            df_novo.rename(columns={'REGISTRO_DE_AULA': 'REGISTRO_DE_AULA_novo',
+                                    'REGISTRO_DE_CONTEUDO': 'REGISTRO_DE_CONTEUDO_novo'}),
+            on=key_cols,
+            how='left'
+        )
+
+        # As pendências restantes são aquelas onde as novas colunas AINDA são nulas
+        mascara_ainda_pendente = df_merged_pendencias['REGISTRO_DE_AULA_novo'].isnull() | df_merged_pendencias[
+            'REGISTRO_DE_CONTEUDO_novo'].isnull()
+        df_pendencias_restantes = df_merged_pendencias[mascara_ainda_pendente][df_historico_pendente.columns]
+        # --- FIM DA CORREÇÃO ---
 
         # 7. Montar o dicionário de resultados
         resultados = {
