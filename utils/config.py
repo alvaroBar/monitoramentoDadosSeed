@@ -12,6 +12,7 @@ try:
         "https://www.googleapis.com/auth/userinfo.profile",
         "openid",
         "https://www.googleapis.com/auth/bigquery",
+        "https://www.googleapis.com/auth/drive.file"
     ]
 
 except (AttributeError, KeyError):

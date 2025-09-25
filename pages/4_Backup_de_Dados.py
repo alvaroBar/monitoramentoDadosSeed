@@ -8,6 +8,9 @@ import pandas as pd
 from services import auth_service
 from services.bigquery_service import BigQueryService
 from streamlit_autorefresh import st_autorefresh
+from services.drive_service import DriveService
+from services.backup_service import BackupService
+from datetime import datetime
 
 st.set_page_config(layout="wide")
 st.title("Backup de Dados do BigQuery 💾")
@@ -50,6 +53,47 @@ bq_service = st.session_state.bq_service
 st_autorefresh(interval=10 * 60 * 1000, key="session_refresher_backup")
 
 # --- Lógica da Página ---
+# Inicializa os novos serviços
+if 'drive_service' not in st.session_state:
+    st.session_state.drive_service = DriveService(credentials=st.session_state.credentials)
+drive_service = st.session_state.drive_service
+
+if 'backup_service' not in st.session_state:
+    st.session_state.backup_service = BackupService(bq_service, drive_service)
+backup_service = st.session_state.backup_service
+
+# --- NOVA SEÇÃO: Backup Automático e Manual ---
+st.markdown("---")
+st.header("Backup para o Google Drive")
+
+# Lógica de Agendamento "Gatilho na Visita"
+DIA_DA_SEMANA_DO_BACKUP = 0 # 0 = Segunda-feira
+hoje = datetime.now()
+
+if 'last_backup_check' not in st.session_state:
+    st.session_state.last_backup_check = None
+
+# Verifica se hoje é o dia do backup e se o backup para esta semana ainda não foi feito
+if hoje.weekday() == DIA_DA_SEMANA_DO_BACKUP and (st.session_state.last_backup_check is None or (hoje - st.session_state.last_backup_check).days >= 7):
+    st.info("Hoje é dia de backup semanal. Iniciando o processo em segundo plano...")
+    with st.spinner("Realizando backup para o Google Drive... Por favor, não feche esta página."):
+        success, message = backup_service.execute_backup(st.session_state.dataset_id)
+        if success:
+            st.success(message)
+            st.session_state.last_backup_check = hoje # Marca que o backup desta semana foi feito
+        else:
+            st.error(message)
+
+# Opção de Backup Manual
+if st.button("Executar Backup Manual Agora", use_container_width=True):
+    with st.spinner("Realizando backup manual para o Google Drive..."):
+        success, message = backup_service.execute_backup(st.session_state.dataset_id)
+        if success:
+            st.success(message)
+            st.session_state.last_backup_check = hoje
+        else:
+            st.error(message)
+
 if 'backup_data' not in st.session_state:
     st.session_state.backup_data = None
 
