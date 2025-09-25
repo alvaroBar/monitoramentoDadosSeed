@@ -119,7 +119,6 @@ if 'validation_results' in st.session_state:
 
     resultados = st.session_state.validation_results
 
-    # NOVO: Exibe as escolas que foram auditadas
     escolas_auditadas = resultados.get("escolas_auditadas", [])
     with st.expander(f"Análise focada em {len(escolas_auditadas)} escola(s). Clique para ver a lista."):
         for escola in escolas_auditadas:
@@ -134,10 +133,47 @@ if 'validation_results' in st.session_state:
     st.subheader(f"Pendências Restantes ({len(df_pendencias)})")
 
     if not df_pendencias.empty:
-        csv_data = df_pendencias.to_csv(index=False).encode('utf-8')
+        # --- LÓGICA DE ESTILIZAÇÃO APLICADA AQUI ---
+
+        # 1. Prepara uma cópia do DataFrame para o download em CSV
+        df_for_csv = df_pendencias.copy()
+        df_for_csv['REGISTRO_DE_AULA'] = pd.to_datetime(df_for_csv['REGISTRO_DE_AULA']).dt.strftime(
+            '%Y-%m-%d %H:%M:%S').fillna("Sem registro")
+        df_for_csv['REGISTRO_DE_CONTEUDO'] = pd.to_datetime(df_for_csv['REGISTRO_DE_CONTEUDO']).dt.strftime(
+            '%Y-%m-%d %H:%M:%S').fillna("Sem registro")
+
+        csv_data = df_for_csv.to_csv(index=False).encode('utf-8')
         st.download_button("📥 Baixar Pendências Restantes como CSV", csv_data, "pendencias_restantes.csv", "text/csv",
                            use_container_width=True)
-        st.dataframe(df_pendencias, use_container_width=True, hide_index=True)
+
+
+        # 2. Define a função de estilo para destacar nulos
+        def highlight_nulls(s):
+            is_null = pd.isna(s)
+            return ['color: red' if v else '' for v in is_null]
+
+
+        # 3. Formata e estiliza o DataFrame para exibição
+        styled_df = df_pendencias.style.apply(highlight_nulls, subset=['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']) \
+            .format({
+            "REGISTRO_DE_AULA": lambda x: "Sem registro" if pd.isna(x) else pd.to_datetime(x).strftime(
+                '%d/%m/%Y %H:%M:%S'),
+            "REGISTRO_DE_CONTEUDO": lambda x: "Sem registro" if pd.isna(x) else pd.to_datetime(x).strftime(
+                '%d/%m/%Y %H:%M:%S')
+        })
+
+        # 4. Exibe o DataFrame estilizado
+        st.dataframe(
+            styled_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "DATA_DO_RELATORIO": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
+                "HORARIO": st.column_config.TimeColumn("Horário", format="HH:mm"),
+                "REGISTRO_DE_AULA": "Registro da Aula",
+                "REGISTRO_DE_CONTEUDO": "Registro do Conteúdo"
+            }
+        )
     else:
         st.success("🎉 Nenhuma pendência restante encontrada para as escolas do arquivo analisado!")
 
