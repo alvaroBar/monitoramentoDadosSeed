@@ -112,7 +112,7 @@ class BigQueryService:
         except Exception:
             return 0
 
-    @st.cache_data(ttl=3600)
+    #@st.cache_data(ttl=3600)
     def get_filter_options(_self):
         """Busca todos os valores únicos para os filtros da página de consulta."""
         query = f"""
@@ -201,7 +201,7 @@ class BigQueryService:
             st.error(f"Erro ao listar as tabelas de análise: {e}")
             return []
 
-    @st.cache_data(ttl=600)
+    #@st.cache_data(ttl=600)
     def get_analysis_audit_stats(_self, table_name):
         """Busca estatísticas de uma tabela de auditoria específica."""
         if not table_name.startswith('auditoria_'): return None
