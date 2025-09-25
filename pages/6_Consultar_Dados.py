@@ -108,49 +108,46 @@ if 'search_results' in st.session_state and st.session_state.get('submitted_form
     if not df_results.empty:
         st.success(f"{len(df_results)} registros encontrados.")
 
-        # --- LÓGICA DE ESTILIZAÇÃO ROBUSTA (VERSÃO 2) ---
+        # --- LÓGICA DE ESTILIZAÇÃO E DOWNLOAD ATUALIZADA ---
 
-        # 1. Prepara uma cópia para o download em CSV (sem alteração)
-        df_for_csv = df_results.copy()
-        for col in ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']:
-            df_for_csv[col] = pd.to_datetime(df_for_csv[col]).dt.strftime('%Y-%m-%d %H:%M:%S').fillna("Sem registro")
-
-        csv_data = df_for_csv.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Baixar resultados como CSV",
-            data=csv_data,
-            file_name="consulta_relatorios.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
-
-        # 2. Prepara um DataFrame para EXIBIÇÃO de forma mais segura
+        # 1. Prepara um DataFrame para exibição e download
         df_for_display = df_results.copy()
 
 
         def formatar_e_preencher(valor):
-            """Função para formatar data/hora ou retornar 'Sem registro' se for nulo."""
             if pd.isna(valor):
                 return "Sem registro"
-            # Converte para datetime e formata. Adiciona-se tz=None para evitar problemas de fuso horário.
             return pd.to_datetime(valor).tz_localize(None).strftime('%d/%m/%Y %H:%M:%S')
 
 
-        # Aplica a função de formatação segura
         for col in ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']:
             df_for_display[col] = df_for_display[col].apply(formatar_e_preencher)
 
 
-        # 3. Define a função de estilo que reage ao TEXTO
+        # 2. Define a função de estilo que reage ao TEXTO
         def highlight_sem_registro(cell_value):
             return 'color: red' if cell_value == "Sem registro" else ''
 
 
-        # 4. Aplica o estilo ao DataFrame de exibição já formatado
+        # 3. Aplica o estilo ao DataFrame
         styled_df = df_for_display.style.applymap(highlight_sem_registro,
                                                   subset=['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO'])
 
-        # 5. Exibe o DataFrame estilizado
+        # 4. ALTERADO: Lógica do botão de download para gerar um arquivo Excel (.xlsx)
+        output = io.BytesIO()
+        # O Styler (styled_df) consegue escrever a formatação para um arquivo Excel
+        styled_df.to_excel(output, engine='openpyxl', index=False)
+        excel_data = output.getvalue()
+
+        st.download_button(
+            label="📥 Baixar resultados como Excel (.xlsx)",
+            data=excel_data,
+            file_name="consulta_relatorios.xlsx",  # Nome do arquivo alterado
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",  # Tipo do arquivo alterado
+            use_container_width=True
+        )
+
+        # 5. Exibe o DataFrame estilizado na tela (sem alteração)
         st.dataframe(
             styled_df,
             column_config={
