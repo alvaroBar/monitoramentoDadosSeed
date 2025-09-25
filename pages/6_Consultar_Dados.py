@@ -98,6 +98,8 @@ if submitted:
             st.session_state.search_results = bq_service.query_data(filters)
             st.session_state.submitted_form = True
 
+# p6_Consultar_Dados.py -> Substitua esta seção inteira
+
 if 'search_results' in st.session_state and st.session_state.get('submitted_form'):
     st.markdown("---")
     st.header("Resultados da Busca")
@@ -106,14 +108,12 @@ if 'search_results' in st.session_state and st.session_state.get('submitted_form
     if not df_results.empty:
         st.success(f"{len(df_results)} registros encontrados.")
 
-        # --- ALTERAÇÃO APLICADA AQUI ---
+        # --- LÓGICA DE ESTILIZAÇÃO ROBUSTA APLICADA AQUI ---
 
         # 1. Prepara uma cópia do DataFrame para o download em CSV
         df_for_csv = df_results.copy()
-        df_for_csv['REGISTRO_DE_AULA'] = pd.to_datetime(df_for_csv['REGISTRO_DE_AULA']).dt.strftime(
-            '%Y-%m-%d %H:%M:%S').fillna("Sem registro")
-        df_for_csv['REGISTRO_DE_CONTEUDO'] = pd.to_datetime(df_for_csv['REGISTRO_DE_CONTEUDO']).dt.strftime(
-            '%Y-%m-%d %H:%M:%S').fillna("Sem registro")
+        for col in ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']:
+            df_for_csv[col] = pd.to_datetime(df_for_csv[col]).dt.strftime('%Y-%m-%d %H:%M:%S').fillna("Sem registro")
 
         csv_data = df_for_csv.to_csv(index=False).encode('utf-8')
         st.download_button(
@@ -124,29 +124,30 @@ if 'search_results' in st.session_state and st.session_state.get('submitted_form
             use_container_width=True
         )
 
+        # 2. Prepara um DataFrame para EXIBIÇÃO
+        df_for_display = df_results.copy()
+        # Primeiro, converte as datas válidas para string no formato desejado
+        for col in ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']:
+            df_for_display[col] = pd.to_datetime(df_for_display[col]).dt.strftime('%d/%m/%Y %H:%M:%S')
+        # Agora, preenche os valores nulos restantes (que viraram NaT/NaN) com o texto
+        df_for_display.fillna("Sem registro", inplace=True)
 
-        # 2. Define a função de estilo para destacar nulos
-        def highlight_nulls(s):
-            is_null = pd.isna(s)
-            return ['color: red' if v else '' for v in is_null]
+
+        # 3. Define uma função de estilo que reage ao TEXTO "Sem registro"
+        def highlight_sem_registro(cell_value):
+            return 'color: red' if cell_value == "Sem registro" else ''
 
 
-        # 3. Formata e estiliza o DataFrame para exibição
-        styled_df = df_results.style.apply(highlight_nulls, subset=['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']) \
-            .format({
-            "REGISTRO_DE_AULA": lambda x: "Sem registro" if pd.isna(x) else pd.to_datetime(x).strftime(
-                '%d/%m/%Y %H:%M:%S'),
-            "REGISTRO_DE_CONTEUDO": lambda x: "Sem registro" if pd.isna(x) else pd.to_datetime(x).strftime(
-                '%d/%m/%Y %H:%M:%S')
-        })
+        # 4. Aplica o estilo ao DataFrame de exibição
+        styled_df = df_for_display.style.applymap(highlight_sem_registro,
+                                                  subset=['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO'])
 
-        # 4. Exibe o DataFrame estilizado
+        # 5. Exibe o DataFrame estilizado
         st.dataframe(
             styled_df,
             column_config={
                 "DATA_DO_RELATORIO": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
                 "HORARIO": st.column_config.TimeColumn("Horário", format="HH:mm"),
-                # As colunas estilizadas agora são tratadas como texto
                 "REGISTRO_DE_AULA": "Registro da Aula",
                 "REGISTRO_DE_CONTEUDO": "Registro do Conteúdo"
             },
