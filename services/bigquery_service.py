@@ -211,6 +211,7 @@ class BigQueryService:
             counts_query = f"SELECT COUNT(*) AS total_registros, COUNTIF(REGISTRO_DE_AULA IS NULL) AS total_sem_aula, COUNTIF(REGISTRO_DE_CONTEUDO IS NULL) AS total_sem_conteudo FROM {table_ref}"
             df_counts = pandas_gbq.read_gbq(counts_query, project_id=_self.project_id, credentials=_self.creds)
 
+            # Nova Query (retorna as colunas originais)
             details_query = f"""
                 SELECT
                     DATA_DO_RELATORIO,
@@ -218,8 +219,8 @@ class BigQueryService:
                     ESCOLA,
                     DISCIPLINA,
                     TURMA,
-                    CASE WHEN REGISTRO_DE_AULA IS NULL THEN 'Sim' ELSE 'Não' END as PENDENCIA_AULA,
-                    CASE WHEN REGISTRO_DE_CONTEUDO IS NULL THEN 'Sim' ELSE 'Não' END as PENDENCIA_CONTEUDO
+                    REGISTRO_DE_AULA,
+                    REGISTRO_DE_CONTEUDO
                 FROM {table_ref}
                 WHERE REGISTRO_DE_AULA IS NULL OR REGISTRO_DE_CONTEUDO IS NULL
                 ORDER BY DATA_DO_RELATORIO, HORARIO, ESCOLA

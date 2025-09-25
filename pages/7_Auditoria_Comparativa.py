@@ -179,22 +179,46 @@ else:
             if not df_details.empty:
                 st.markdown("---")
                 st.subheader("Detalhes das Pendências")
-                csv_data = df_details.to_csv(index=False).encode('utf-8')
-                st.download_button(label="📥 Baixar detalhes como CSV", data=csv_data,
-                                   file_name=f"{selected_table}_detalhes.csv", mime="text/csv",
-                                   use_container_width=True)
+
+                # --- LÓGICA DE ESTILIZAÇÃO ADICIONADA AQUI ---
+
+                # 1. Cria uma cópia do DataFrame para o CSV e preenche os nulos com texto
+                df_for_csv = df_details.copy()
+                df_for_csv['REGISTRO_DE_AULA'] = pd.to_datetime(df_for_csv['REGISTRO_DE_AULA']).dt.strftime('%Y-%m-%d %H:%M:%S').fillna("Sem registro")
+                df_for_csv['REGISTRO_DE_CONTEUDO'] = pd.to_datetime(df_for_csv['REGISTRO_DE_CONTEUDO']).dt.strftime('%Y-%m-%d %H:%M:%S').fillna("Sem registro")
+
+                csv_data = df_for_csv.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label=f"📥 Baixar detalhes como CSV",
+                    data=csv_data,
+                    file_name=f"{selected_table}_detalhes.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+
+                # 2. Função para aplicar a cor vermelha em valores nulos
+                def highlight_nulls(s):
+                    is_null = pd.isna(s)
+                    return ['color: red' if v else '' for v in is_null]
+
+                # 3. Preenche os nulos com "Sem registro" e aplica o estilo
+                styled_df = df_details.style.apply(highlight_nulls, subset=['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO'])\
+                                            .format({
+                                                "REGISTRO_DE_AULA": lambda x: "Sem registro" if pd.isna(x) else pd.to_datetime(x).strftime('%d/%m/%Y %H:%M:%S'),
+                                                "REGISTRO_DE_CONTEUDO": lambda x: "Sem registro" if pd.isna(x) else pd.to_datetime(x).strftime('%d/%m/%Y %H:%M:%S')
+                                            })
+
+                # 4. Exibe o DataFrame estilizado
                 st.dataframe(
-                    df_details,
+                    styled_df,
                     use_container_width=True,
                     hide_index=True,
                     column_config={
                         "DATA_DO_RELATORIO": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
                         "HORARIO": st.column_config.TimeColumn("Horário", format="HH:mm"),
-                        "PENDENCIA_AULA": st.column_config.TextColumn("Aula Pendente?"),
-                        "PENDENCIA_CONTEUDO": st.column_config.TextColumn("Conteúdo Pendente?")
+                        "REGISTRO_DE_AULA": "Registro da Aula",
+                        "REGISTRO_DE_CONTEUDO": "Registro do Conteúdo"
                     }
                 )
             else:
-                st.success("🎉 Todos os registros nesta auditoria estão completos.")
-        else:
-            st.warning("Formato de relatório de auditoria desconhecido.")
+                st.success("🎉 Não foram encontrados registros com pendências nesta auditoria.")
