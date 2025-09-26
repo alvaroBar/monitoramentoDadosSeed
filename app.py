@@ -50,34 +50,33 @@ st.markdown("""
 # 1. Autenticação
 auth_service.autenticar_usuario()
 
-if 'user_info' not in st.session_state:
-    st.info("Por favor, faça login com a sua conta Google para continuar.")
-    st.stop()
+# --- ALTERAÇÃO APLICADA AQUI: Estrutura if/else ---
+# Agora, todo o conteúdo da página só é renderizado se o usuário estiver logado.
+if 'user_info' in st.session_state:
+    # 2. Lógica de Mapeamento do Usuário para o Dataset
+    user_info = st.session_state.user_info
+    user_email = user_info.get("email")
+    user_name = user_info.get("name", "Usuário")
 
-# 2. Lógica de Mapeamento do Usuário para o Dataset
-user_info = st.session_state.user_info
-user_email = user_info.get("email")
-user_name = user_info.get("name", "Usuário")
-
-try:
-    office_mapping = st.secrets.office_mapping
-    if user_email in office_mapping:
-        st.session_state.dataset_id = office_mapping[user_email]
-    else:
-        st.error(f"ERRO: O e-mail '{user_email}' não está autorizado. Contate o administrador.")
+    try:
+        office_mapping = st.secrets.office_mapping
+        if user_email in office_mapping:
+            st.session_state.dataset_id = office_mapping[user_email]
+        else:
+            st.error(f"ERRO: O e-mail '{user_email}' não está autorizado. Contate o administrador.")
+            st.stop()
+    except (AttributeError, KeyError):
+        st.error(
+            "ERRO DE CONFIGURAÇÃO: O mapeamento [office_mapping] não foi encontrado nos Segredos do Streamlit.")
         st.stop()
-except (AttributeError, KeyError):
-    st.error(
-        "ERRO DE CONFIGURAÇÃO: O mapeamento [office_mapping] não foi encontrado nos Segredos do Streamlit.")
-    st.stop()
 
-with st.sidebar:
-    st.subheader(f"Olá, {user_name}!")
-    if st.button("Logout"):
-        auth_service.logout_usuario()
+    with st.sidebar:
+        st.subheader(f"Olá, {user_name}!")
+        if st.button("Logout"):
+            auth_service.logout_usuario()
 
-# --- Keep-alive da sessão ---
-st_autorefresh(interval=5 * 60 * 1000, key="session_refresher_dashboard")
+    # --- Keep-alive da sessão ---
+    st_autorefresh(interval=5 * 60 * 1000, key="session_refresher_dashboard")
 
 # 3. Inicialização do Serviço do BigQuery
 if 'bq_service' not in st.session_state:
