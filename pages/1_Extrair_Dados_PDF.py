@@ -128,7 +128,7 @@ action_placeholder = col_btn.empty()
 
 if uploaded_files and disciplinas_file and not st.session_state.processing:
     # MANTIDO: O botão de iniciar é a ação principal, continua como 'primary'.
-    if action_placeholder.button(f"Iniciar Extração de {len(uploaded_files)} Arquivos", type="primary"):
+    if action_placeholder.button(f"Iniciar Extração de {len(uploaded_files)} Arquivos", type="secondary"):
         st.session_state.processing = True
         st.session_state.cancel_extraction = False
         if 'final_df' in st.session_state:
@@ -137,7 +137,7 @@ if uploaded_files and disciplinas_file and not st.session_state.processing:
 
 if st.session_state.processing:
     # MUDANÇA: O botão de cancelar agora é explicitamente 'secondary' para ter uma cor neutra (geralmente cinza).
-    if action_placeholder.button("Cancelar Processo", type="secondary"):
+    if action_placeholder.button("Cancelar Processo", type="primary"):
         st.session_state.cancel_extraction = True
 
     try:
