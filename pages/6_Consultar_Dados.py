@@ -164,8 +164,8 @@ with col_main:
                     df_for_display[col] = df_for_display[col].apply(formatar_e_preencher)
 
                 excel_data = to_excel_auto_width(
-                    df_for_display.style.applymap(lambda x: 'color: red' if x == "Sem registro" else '',
-                                                  subset=['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']))
+                    df_for_display.style.map(lambda x: 'color: red' if x == "Sem registro" else '',
+                                             subset=['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']))
 
                 _, col_btn_download = st.columns([3, 1])
                 with col_btn_download:
@@ -182,8 +182,9 @@ with col_main:
                     return 'color: red' if cell_value == "Sem registro" else ''
 
 
-                styled_df = df_for_display.style.applymap(highlight_sem_registro,
-                                                          subset=['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO'])
+                # CORREÇÃO: Substituído .applymap() por .map()
+                styled_df = df_for_display.style.map(highlight_sem_registro,
+                                                     subset=['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO'])
 
                 st.dataframe(
                     styled_df,
@@ -198,3 +199,4 @@ with col_main:
                 )
             else:
                 st.info("Nenhum registro encontrado com os filtros selecionados.")
+
