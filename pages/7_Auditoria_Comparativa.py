@@ -1,10 +1,12 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: p7_Auditoria_Comparativa.py
-# VERSÃO FINAL: Inclui a nova "Auditoria de Validação" e mantém a funcionalidade original.
+# VERSÃO REVISADA: Adicionada exportação para Excel com auto-ajuste de colunas.
 # ==============================================================================
 
 import streamlit as st
 import pandas as pd
+import io
+from openpyxl.utils import get_column_letter
 from streamlit_autorefresh import st_autorefresh
 from services import auth_service
 from services.bigquery_service import BigQueryService
@@ -47,6 +49,32 @@ if 'bq_service' not in st.session_state:
 bq_service = st.session_state.bq_service
 st_autorefresh(interval=10 * 60 * 1000, key="session_refresher_auditoria")
 
+
+# --- FUNÇÃO AUXILIAR REUTILIZÁVEL PARA EXCEL ---
+def to_excel_auto_width(df_styled):
+    output = io.BytesIO()
+    writer = pd.ExcelWriter(output, engine='openpyxl')
+    # Escreve o DataFrame com a formatação de cores para a planilha
+    df_styled.to_excel(writer, index=False, sheet_name='Resultados')
+
+    worksheet = writer.sheets['Resultados']
+
+    for column_cells in worksheet.columns:
+        max_length = 0
+        column_letter = get_column_letter(column_cells[0].column)
+        for cell in column_cells:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        adjusted_width = (max_length + 2)
+        worksheet.column_dimensions[column_letter].width = adjusted_width
+
+    writer.close()
+    return output.getvalue()
+
+
 # --- Seção de Geração de Análise ---
 st.info(
     "**Fluxo de Trabalho:**\n"
@@ -56,31 +84,30 @@ st.info(
 st.markdown("---")
 
 with st.expander("➕ Gerar Nova Análise", expanded=True):
+    # ... (código para os inputs da análise permanece o mesmo) ...
     tipo_auditoria = st.radio(
         "1. Escolha o tipo de análise:",
         options=["Análise de Pendências Históricas (Salva Relatório)", "Validação de Lançamentos (Análise Rápida)"],
         horizontal=True,
     )
-
     analysis_name = st.text_input("2. Dê um nome para a análise (obrigatório para salvar relatório)",
                                   placeholder="Ex: Verificação Semanas 30-35")
     uploaded_parquet = st.file_uploader("3. Carregue o arquivo `dados_extraidos.parquet`", type=["parquet"])
-
     st.write("4. Selecione as semanas do histórico para comparar.")
     with st.spinner("Carregando semanas disponíveis..."):
         available_weeks = bq_service.get_available_weeks()
     selected_weeks = st.multiselect("Semanas:", options=available_weeks if available_weeks else [])
 
     if st.button("Executar Análise", use_container_width=True, type="primary"):
+        # ... (lógica de execução da análise permanece a mesma) ...
         if 'validation_results' in st.session_state:
             del st.session_state.validation_results
-
         if not uploaded_parquet:
             st.error("Por favor, carregue o arquivo .parquet.")
         elif not selected_weeks:
             st.error("Por favor, selecione pelo menos uma semana.")
         else:
-            with st.spinner("Processando... Esta operação pode levar alguns instantes."):
+            with st.spinner("Processando..."):
                 try:
                     df_from_parquet = pd.read_parquet(uploaded_parquet)
                     if df_from_parquet.empty:
@@ -99,7 +126,6 @@ with st.expander("➕ Gerar Nova Análise", expanded=True):
                                     st.balloons()
                                 else:
                                     st.error(mensagem)
-
                         elif tipo_auditoria == "Validação de Lançamentos (Análise Rápida)":
                             sucesso, resultados = analysis_service.executar_validacao_de_lancamentos(bq_service,
                                                                                                      selected_weeks,
@@ -108,7 +134,6 @@ with st.expander("➕ Gerar Nova Análise", expanded=True):
                                 st.session_state.validation_results = resultados
                             else:
                                 st.error(resultados)
-
                 except Exception as e:
                     st.error(f"Ocorreu um erro inesperado: {e}")
 
@@ -116,60 +141,48 @@ with st.expander("➕ Gerar Nova Análise", expanded=True):
 if 'validation_results' in st.session_state:
     st.markdown("---")
     st.header("Resultados da Validação de Lançamentos")
-
     resultados = st.session_state.validation_results
-
     escolas_auditadas = resultados.get("escolas_auditadas", [])
     with st.expander(f"Análise focada em {len(escolas_auditadas)} escola(s). Clique para ver a lista."):
         for escola in escolas_auditadas:
             st.write(f"- {escola}")
-
     col1, col2 = st.columns(2)
     col1.metric("Registros Correspondentes (Matches)", resultados.get("total_matches", 0))
-    col2.metric("Registros Corrigidos (Nulos Preenchentos)", resultados.get("nulos_preenchidos", 0))
-
+    col2.metric("Registros Corrigidos (Nulos Preenchidos)", resultados.get("nulos_preenchidos", 0))
     df_pendencias = resultados.get("pendencias_restantes", pd.DataFrame())
-
     st.subheader(f"Pendências Restantes ({len(df_pendencias)})")
 
     if not df_pendencias.empty:
-        # --- LÓGICA DE ESTILIZAÇÃO CORRIGIDA E MAIS ROBUSTA ---
-
-        # 1. Prepara o DataFrame para o download em CSV (sem alteração)
-        df_for_csv = df_pendencias.copy()
-        for col in ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']:
-            df_for_csv[col] = pd.to_datetime(df_for_csv[col]).dt.strftime('%Y-%m-%d %H:%M:%S').fillna("Sem registro")
-        csv_data = df_for_csv.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Baixar Pendências Restantes como CSV", csv_data, "pendencias_restantes.csv", "text/csv", use_container_width=True)
-
-        # 2. Prepara um DataFrame para EXIBIÇÃO
         df_for_display = df_pendencias.copy()
-        # Primeiro, converte as datas válidas para string no formato desejado
-        for col in ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']:
-            df_for_display[col] = pd.to_datetime(df_for_display[col]).dt.strftime('%d/%m/%Y %H:%M:%S')
-        # Agora, preenche os valores nulos restantes (que viraram NaT/NaN) com o texto
-        df_for_display.fillna("Sem registro", inplace=True)
 
-        # 3. Define uma função de estilo mais simples que reage ao TEXTO
-        def highlight_sem_registro(cell_value):
+
+        def formatar_e_preencher_validacao(valor):
+            if pd.isna(valor): return "Sem registro"
+            return pd.to_datetime(valor).tz_localize(None).strftime('%d/%m/%Y %H:%M:%S')
+
+
+        for col in ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']:
+            df_for_display[col] = df_for_display[col].apply(formatar_e_preencher_validacao)
+
+
+        def highlight_sem_registro_validacao(cell_value):
             return 'color: red' if cell_value == "Sem registro" else ''
 
-        # 4. Aplica o estilo ao DataFrame de exibição
-        styled_df = df_for_display.style.applymap(highlight_sem_registro, subset=['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO'])
 
-        # 5. Exibe o DataFrame estilizado
-        st.dataframe(
-            styled_df,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "DATA_DO_RELATORIO": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
-                "HORARIO": st.column_config.TimeColumn("Horário", format="HH:mm")
-            }
-        )
+        styled_df_validacao = df_for_display.style.applymap(highlight_sem_registro_validacao,
+                                                            subset=['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO'])
+
+        # ALTERADO: Botão de download para Excel
+        excel_data_validacao = to_excel_auto_width(styled_df_validacao)
+        st.download_button("📥 Baixar Pendências como Excel (.xlsx)", excel_data_validacao, "pendencias_restantes.xlsx",
+                           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                           use_container_width=True)
+
+        st.dataframe(styled_df_validacao, use_container_width=True, hide_index=True,
+                     column_config={"DATA_DO_RELATORIO": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
+                                    "HORARIO": st.column_config.TimeColumn("Horário", format="HH:mm")})
     else:
         st.success("🎉 Nenhuma pendência restante encontrada para as escolas do arquivo analisado!")
-
     if st.button("Limpar Resultados da Validação"):
         del st.session_state.validation_results
         st.rerun()
@@ -179,13 +192,11 @@ st.markdown("---")
 st.header("Visualizar Relatórios de Pendências Salvas")
 with st.spinner("Buscando auditorias existentes..."):
     analysis_tables = bq_service.list_analysis_tables()
-
 if not analysis_tables:
     st.info("Nenhuma auditoria salva foi criada ainda.")
 else:
     table_options = ["Selecione uma auditoria para visualizar..."] + sorted(analysis_tables)
     selected_table = st.selectbox("Auditorias Disponíveis:", options=table_options)
-
     if selected_table != "Selecione uma auditoria para visualizar...":
         with st.spinner(f"Gerando resumo para '{selected_table}'..."):
             audit_stats = bq_service.get_analysis_audit_stats(selected_table)
@@ -204,50 +215,41 @@ else:
             col1.metric("Total de Pendências", f"{counts.get('total_registros', 0):,}".replace(",", "."))
             col2.metric("Aulas sem Registro", f"{counts.get('total_sem_aula', 0):,}".replace(",", "."))
             col3.metric("Conteúdos sem Registro", f"{counts.get('total_sem_conteudo', 0):,}".replace(",", "."))
-
             if not df_details.empty:
                 st.markdown("---")
                 st.subheader("Detalhes das Pendências")
 
-                # --- LÓGICA DE ESTILIZAÇÃO ADICIONADA AQUI ---
+                df_for_display_saved = df_details.copy()
 
-                # 1. Cria uma cópia do DataFrame para o CSV e preenche os nulos com texto
-                df_for_csv = df_details.copy()
-                df_for_csv['REGISTRO_DE_AULA'] = pd.to_datetime(df_for_csv['REGISTRO_DE_AULA']).dt.strftime('%Y-%m-%d %H:%M:%S').fillna("Sem registro")
-                df_for_csv['REGISTRO_DE_CONTEUDO'] = pd.to_datetime(df_for_csv['REGISTRO_DE_CONTEUDO']).dt.strftime('%Y-%m-%d %H:%M:%S').fillna("Sem registro")
 
-                csv_data = df_for_csv.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label=f"📥 Baixar detalhes como CSV",
-                    data=csv_data,
-                    file_name=f"{selected_table}_detalhes.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
+                def formatar_e_preencher_saved(valor):
+                    if pd.isna(valor): return "Sem registro"
+                    return pd.to_datetime(valor).tz_localize(None).strftime('%d/%m/%Y %H:%M:%S')
 
-                # 2. Função para aplicar a cor vermelha em valores nulos
-                def highlight_nulls(s):
-                    is_null = pd.isna(s)
-                    return ['color: red' if v else '' for v in is_null]
 
-                # 3. Preenche os nulos com "Sem registro" e aplica o estilo
-                styled_df = df_details.style.apply(highlight_nulls, subset=['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO'])\
-                                            .format({
-                                                "REGISTRO_DE_AULA": lambda x: "Sem registro" if pd.isna(x) else pd.to_datetime(x).strftime('%d/%m/%Y %H:%M:%S'),
-                                                "REGISTRO_DE_CONTEUDO": lambda x: "Sem registro" if pd.isna(x) else pd.to_datetime(x).strftime('%d/%m/%Y %H:%M:%S')
-                                            })
+                for col in ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']:
+                    df_for_display_saved[col] = df_for_display_saved[col].apply(formatar_e_preencher_saved)
 
-                # 4. Exibe o DataFrame estilizado
-                st.dataframe(
-                    styled_df,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "DATA_DO_RELATORIO": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
-                        "HORARIO": st.column_config.TimeColumn("Horário", format="HH:mm"),
-                        "REGISTRO_DE_AULA": "Registro da Aula",
-                        "REGISTRO_DE_CONTEUDO": "Registro do Conteúdo"
-                    }
-                )
+
+                def highlight_sem_registro_saved(cell_value):
+                    return 'color: red' if cell_value == "Sem registro" else ''
+
+
+                styled_df_saved = df_for_display_saved.style.applymap(highlight_sem_registro_saved,
+                                                                      subset=['REGISTRO_DE_AULA',
+                                                                              'REGISTRO_DE_CONTEUDO'])
+
+                # ALTERADO: Botão de download para Excel
+                excel_data_saved = to_excel_auto_width(styled_df_saved)
+                st.download_button(label="📥 Baixar detalhes como Excel (.xlsx)", data=excel_data_saved,
+                                   file_name=f"{selected_table}_detalhes.xlsx",
+                                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                   use_container_width=True)
+
+                st.dataframe(styled_df_saved, use_container_width=True, hide_index=True, column_config={
+                    "DATA_DO_RELATORIO": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
+                    "HORARIO": st.column_config.TimeColumn("Horário", format="HH:mm")})
             else:
-                st.success("🎉 Não foram encontrados registros com pendências nesta auditoria.")
+                st.success("🎉 Todos os registros nesta auditoria estão completos.")
+        else:
+            st.warning("Formato de relatório de auditoria desconhecido.")
