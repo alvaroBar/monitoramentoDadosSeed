@@ -1,44 +1,51 @@
-# ==============================================================================
-# ARQUIVO DA PÁGINA PRINCIPAL: app.py
-# VERSÃO FINAL: Corrigida a indentação para proteger o conteúdo da página.
-# ==============================================================================
-
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 from services import auth_service
 from services.bigquery_service import BigQueryService
 from streamlit_autorefresh import st_autorefresh
 
+# ------------------ Configuração da Página ------------------
 st.set_page_config(
     page_title="Dashboard",
     page_icon="📊",
     layout="wide"
 )
 
-st.title("📊 Dashboard")
-
-# --- CSS customizado ---
+# ------------------ Estilo Customizado ------------------
 st.markdown("""
 <style>
-/* ... seu CSS ... */
-.metric-card { background-color: #262730; border-radius: 10px; padding: 20px; margin: 10px 0; border: 1px solid #3c3f4b; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; height: 150px; display: flex; flex-direction: column; justify-content: center; }
-.metric-card p { margin: 0; font-size: 1.1em; color: #a0a4b8; }
-.metric-card h2 { margin: 5px 0 0 0; font-size: 2.5em; color: #ffffff; font-weight: 600; }
+.metric-card {
+    background-color: #f8f9fa;
+    border-radius: 15px;
+    padding: 20px;
+    margin: 5px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.metric-card h2 {
+    margin: 0;
+    font-size: 2em;
+    color: #2c3e50;
+}
+.metric-card p {
+    margin: 0;
+    color: #6c757d;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# 1. Autenticação
+st.title("📊 Dashboard de Monitoramento")
+
+# ------------------ Autenticação ------------------
 auth_service.autenticar_usuario()
 
-# --- Estrutura de Proteção ---
-# Todo o código que requer um usuário logado deve estar dentro deste bloco 'if'.
 if 'user_info' in st.session_state:
-
-    # 2. Lógica de Mapeamento do Usuário para o Dataset
     user_info = st.session_state.user_info
     user_email = user_info.get("email")
     user_name = user_info.get("name", "Usuário")
 
+    # Mapeamento de dataset
     try:
         office_mapping = st.secrets.office_mapping
         if user_email in office_mapping:
@@ -50,15 +57,17 @@ if 'user_info' in st.session_state:
         st.error("ERRO DE CONFIGURAÇÃO: O mapeamento [office_mapping] não foi encontrado.")
         st.stop()
 
+    # Sidebar
     with st.sidebar:
-        st.subheader(f"Olá, {user_name}!")
-        if st.button("Logout"):
+        st.subheader(f"👋 Olá, {user_name}")
+        st.caption(f"Dataset ativo: `{st.session_state.dataset_id}`")
+        if st.button("🔒 Logout"):
             auth_service.logout_usuario()
 
-    # --- Keep-alive da sessão ---
+    # Mantém a sessão ativa
     st_autorefresh(interval=5 * 60 * 1000, key="session_refresher_dashboard")
 
-    # 3. Inicialização do Serviço do BigQuery
+    # Serviço BigQuery
     if 'bq_service' not in st.session_state:
         st.session_state.bq_service = BigQueryService(
             credentials=st.session_state.credentials,
@@ -66,15 +75,11 @@ if 'user_info' in st.session_state:
         )
     bq_service = st.session_state.bq_service
 
-    # --- Conteúdo do Dashboard ---
-    st.markdown(f"Visão geral dos dados para o seu escritório (Dataset: `{st.session_state.dataset_id}`).")
-
-    with st.spinner("A carregar estatísticas..."):
+    # ------------------ Estatísticas ------------------
+    with st.spinner("🔄 Carregando estatísticas..."):
         stats = bq_service.get_dashboard_stats()
 
     if stats and stats.get('total_registros', 0) > 0:
-        st.markdown("---")
-
         total_registros = stats.get('total_registros', 0)
         sem_registro_aula = stats.get('sem_registro_aula', 0)
         sem_registro_conteudo = stats.get('sem_registro_conteudo', 0)
@@ -84,51 +89,57 @@ if 'user_info' in st.session_state:
         num_escolas_pendentes = stats.get("total_escolas_com_pendencias", 0)
         ultima_semana = stats.get("ultima_semana_lancada", 0)
 
+        # ------------------ KPIs ------------------
+        st.markdown("### 📌 Visão Geral")
         col1, col2, col3, col4, col5 = st.columns(5)
         with col1:
-            st.metric(label="Total de Registros", value=f"{total_registros:,}".replace(",", "."))
+            st.markdown(f"<div class='metric-card'><p>Total de Registros</p><h2>{total_registros:,}</h2></div>", unsafe_allow_html=True)
         with col2:
-            st.metric(label="Adesão de Aulas", value=f"{taxa_adesao_aula:.1f}%", help="Percentual de registros de aulas preenchidos.")
+            st.markdown(f"<div class='metric-card'><p>Adesão de Aulas</p><h2>{taxa_adesao_aula:.1f}%</h2></div>", unsafe_allow_html=True)
         with col3:
-            st.metric(label="Adesão de Conteúdos", value=f"{taxa_adesao_conteudo:.1f}%", help="Percentual de registros de conteúdos preenchidos.")
+            st.markdown(f"<div class='metric-card'><p>Adesão de Conteúdos</p><h2>{taxa_adesao_conteudo:.1f}%</h2></div>", unsafe_allow_html=True)
         with col4:
-            st.metric(label="Escolas com Pendências", value=num_escolas_pendentes, help="Número de escolas com pelo menos um registro de aula ou conteúdo faltando.")
+            st.markdown(f"<div class='metric-card'><p>Escolas com Pendências</p><h2>{num_escolas_pendentes}</h2></div>", unsafe_allow_html=True)
         with col5:
-            st.metric(label="Última Semana Lançada", value=int(ultima_semana) if ultima_semana else 0)
+            st.markdown(f"<div class='metric-card'><p>Última Semana</p><h2>{int(ultima_semana) if ultima_semana else 0}</h2></div>", unsafe_allow_html=True)
 
-        st.markdown("---")
-        st.header("Análises de Pendências")
-        col_chart1, col_chart2 = st.columns(2)
-        with col_chart1:
-            st.subheader("Top 5 Escolas com Mais Pendências")
-            if df_escolas_pendentes is not None and not df_escolas_pendentes.empty:
-                st.dataframe(df_escolas_pendentes, use_container_width=True, hide_index=True)
-            else:
-                st.info("Nenhuma escola com pendências encontrada.")
-        with col_chart2:
-            st.subheader("Pendências por Município")
-            df_municipios_pendentes = stats.get("pendencias_por_municipio")
-            if df_municipios_pendentes is not None and not df_municipios_pendentes.empty:
-                st.bar_chart(df_municipios_pendentes.set_index("MUNICIPIO"))
-            else:
-                st.info("Nenhum município com pendências encontrado.")
+        # ------------------ Abas ------------------
+        tab1, tab2 = st.tabs(["🏫 Pendências", "📊 Análises Gerais"])
 
-        st.markdown("---")
-        st.header("Análises Gerais")
-        col_geral1, col_geral2 = st.columns(2)
-        with col_geral1:
-            st.subheader("Lançamentos por Semana")
-            df_registros_semana = stats.get("registros_por_semana")
-            if df_registros_semana is not None and not df_registros_semana.empty:
-                st.bar_chart(df_registros_semana)
-            else:
-                st.info("Não há dados de registros por semana para exibir.")
-        with col_geral2:
-            st.subheader("Disciplinas com mais Lançamentos")
-            df_top_disciplinas = stats.get("top_disciplinas")
-            if df_top_disciplinas is not None and not df_top_disciplinas.empty:
-                st.dataframe(df_top_disciplinas, use_container_width=True, hide_index=True)
-            else:
-                st.info("Não há dados de disciplinas para exibir.")
+        with tab1:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.subheader("Top 5 Escolas com Mais Pendências")
+                if df_escolas_pendentes is not None and not df_escolas_pendentes.empty:
+                    st.dataframe(df_escolas_pendentes, use_container_width=True, hide_index=True)
+                else:
+                    st.info("Nenhuma escola com pendências encontrada.")
+            with col2:
+                st.subheader("Pendências por Município")
+                df_municipios_pendentes = stats.get("pendencias_por_municipio")
+                if df_municipios_pendentes is not None and not df_municipios_pendentes.empty:
+                    fig = px.bar(df_municipios_pendentes, x="MUNICIPIO", y="PENDENCIAS", title="Pendências por Município")
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("Nenhum município com pendências encontrado.")
+
+        with tab2:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.subheader("Lançamentos por Semana")
+                df_registros_semana = stats.get("registros_por_semana")
+                if df_registros_semana is not None and not df_registros_semana.empty:
+                    fig = px.bar(df_registros_semana, x=df_registros_semana.index, y=df_registros_semana.columns[0], title="Registros por Semana")
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("Não há dados de registros por semana.")
+            with col2:
+                st.subheader("Disciplinas com mais Lançamentos")
+                df_top_disciplinas = stats.get("top_disciplinas")
+                if df_top_disciplinas is not None and not df_top_disciplinas.empty:
+                    st.dataframe(df_top_disciplinas, use_container_width=True, hide_index=True)
+                else:
+                    st.info("Não há dados de disciplinas disponíveis.")
+
     else:
         st.info("Ainda não há dados lançados para este escritório.")
