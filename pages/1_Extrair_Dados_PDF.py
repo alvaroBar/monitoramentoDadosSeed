@@ -127,7 +127,7 @@ _, col_btn = st.columns([3, 1])  # O primeiro elemento (underscore) é um espaç
 action_placeholder = col_btn.empty()
 
 if uploaded_files and disciplinas_file and not st.session_state.processing:
-    # Removido `use_container_width=True` para o botão ter tamanho normal
+    # MANTIDO: O botão de iniciar é a ação principal, continua como 'primary'.
     if action_placeholder.button(f"Iniciar Extração de {len(uploaded_files)} Arquivos", type="primary"):
         st.session_state.processing = True
         st.session_state.cancel_extraction = False
@@ -136,8 +136,8 @@ if uploaded_files and disciplinas_file and not st.session_state.processing:
         st.rerun()
 
 if st.session_state.processing:
-    # Removido `use_container_width=True` para o botão ter tamanho normal
-    if action_placeholder.button("Cancelar Processo"):
+    # MUDANÇA: O botão de cancelar agora é explicitamente 'secondary' para ter uma cor neutra (geralmente cinza).
+    if action_placeholder.button("Cancelar Processo", type="secondary"):
         st.session_state.cancel_extraction = True
 
     try:
@@ -178,16 +178,16 @@ if 'final_df' in st.session_state and not st.session_state.processing:
     st.dataframe(df_final.head())
     parquet_data = df_final.to_parquet(index=False)
 
-    # CORREÇÃO: Colunas para alinhar o botão de download à direita
+    # Colunas para alinhar o botão de download à direita
     _, col_download_btn = st.columns([3, 1])
     with col_download_btn:
+        # MUDANÇA: O botão de download representa uma ação de sucesso e não precisa da cor primária (vermelha).
+        # Removido type="primary" para usar a cor padrão (secundária), mais adequada para uma ação final.
         st.download_button(
             label="📥 Baixar Arquivo de Dados (.parquet)",
             data=parquet_data,
             file_name="dados_extraidos.parquet",
             mime="application/octet-stream",
-            # CORREÇÃO: Removido use_container_width e adicionado type="primary"
-            type="primary",
             help="Clique para baixar o arquivo. Em seguida, vá para a página 'Carregar Dados para o BigQuery'."
         )
 
