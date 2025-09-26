@@ -66,20 +66,28 @@ with col_main:
         with st.form(key="search_form"):
             col1, col2 = st.columns(2)
             with col1:
-                filtro_semanas = st.multiselect("Semanas", options=opcoes_filtro.get("semanas", []))
-                filtro_municipios = st.multiselect("Municípios", options=opcoes_filtro.get("municipios", []))
-                filtro_escolas = st.multiselect("Escolas", options=opcoes_filtro.get("escolas", []))
+                st.markdown("**Semanas**")
+                filtro_semanas = st.multiselect("Semanas", options=opcoes_filtro.get("semanas", []), label_visibility="collapsed")
+                st.markdown("**Municípios**")
+                filtro_municipios = st.multiselect("Municípios", options=opcoes_filtro.get("municipios", []), label_visibility="collapsed")
+                st.markdown("**Escolas**")
+                filtro_escolas = st.multiselect("Escolas", options=opcoes_filtro.get("escolas", []), label_visibility="collapsed")
             with col2:
-                filtro_disciplinas = st.multiselect("Disciplinas", options=opcoes_filtro.get("disciplinas", []))
-                filtro_turmas = st.multiselect("Turmas", options=opcoes_filtro.get("turmas", []))
+                st.markdown("**Disciplinas**")
+                filtro_disciplinas = st.multiselect("Disciplinas", options=opcoes_filtro.get("disciplinas", []), label_visibility="collapsed")
+                st.markdown("**Turmas**")
+                filtro_turmas = st.multiselect("Turmas", options=opcoes_filtro.get("turmas", []), label_visibility="collapsed")
+                st.markdown("**Filtrar por registros não lançados**")
                 filtro_nulos_opcao = st.selectbox(
                     "Filtrar por registros não lançados",
-                    options=["Não filtrar", "Falta Registo da Aula", "Falta Registo do Conteúdo", "Falta um ou ambos"]
+                    options=["Não filtrar", "Falta Registo da Aula", "Falta Registo do Conteúdo", "Falta um ou ambos"],
+                    label_visibility="collapsed"
                 )
 
+            st.markdown("**Intervalo de Data do Relatório**")
             min_date = pd.to_datetime(opcoes_filtro.get("min_data")).date() if opcoes_filtro.get("min_data") else datetime.date(2020, 1, 1)
             max_date = pd.to_datetime(opcoes_filtro.get("max_data")).date() if opcoes_filtro.get("max_data") else datetime.date.today()
-            filtro_data = st.date_input("Intervalo de Data do Relatório", value=[], min_value=min_date, max_value=max_date)
+            filtro_data = st.date_input("Intervalo de Data do Relatório", value=[], min_value=min_date, max_value=max_date, label_visibility="collapsed")
 
             _, col_btn_buscar = st.columns([3, 1])
             with col_btn_buscar:
@@ -169,3 +177,4 @@ with col_main:
                 )
             else:
                 st.info("Nenhum registro encontrado com os filtros selecionados.")
+
