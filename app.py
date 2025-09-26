@@ -87,9 +87,9 @@ if 'user_info' in st.session_state:
         taxa_adesao_conteudo = ((
                                             total_registros - sem_registro_conteudo) / total_registros) * 100 if total_registros > 0 else 0
 
-        # Garante a conversão para DataFrame
+        # CORREÇÃO: Cria o DataFrame diretamente. pd.DataFrame() lida com None, listas vazias ou outros DataFrames.
         dados_escolas_pendentes = stats.get("escolas_com_pendencias")
-        df_escolas_pendentes = pd.DataFrame(dados_escolas_pendentes) if dados_escolas_pendentes else pd.DataFrame()
+        df_escolas_pendentes = pd.DataFrame(dados_escolas_pendentes)
 
         num_escolas_pendentes = stats.get("total_escolas_com_pendencias", 0)
         ultima_semana = stats.get("ultima_semana_lancada", 0)
@@ -128,16 +128,13 @@ if 'user_info' in st.session_state:
                     st.info("Nenhuma escola com pendências encontrada.")
             with col2:
                 st.subheader("Pendências por Município")
+                # CORREÇÃO: Simplificado para criar o DF e depois checar se está vazio.
                 dados_municipios = stats.get("pendencias_por_municipio")
-                if dados_municipios:
-                    # CORREÇÃO: Converte os dados para um DataFrame antes de usar
-                    df_municipios_pendentes = pd.DataFrame(dados_municipios)
-                    if not df_municipios_pendentes.empty:
-                        fig = px.bar(df_municipios_pendentes, x="MUNICIPIO", y="PENDENCIAS",
-                                     title="Pendências por Município")
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        st.info("Nenhum município com pendências encontrado.")
+                df_municipios_pendentes = pd.DataFrame(dados_municipios)
+                if not df_municipios_pendentes.empty:
+                    fig = px.bar(df_municipios_pendentes, x="MUNICIPIO", y="PENDENCIAS",
+                                 title="Pendências por Município")
+                    st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("Nenhum município com pendências encontrado.")
 
@@ -145,31 +142,26 @@ if 'user_info' in st.session_state:
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("Lançamentos por Semana")
+                # CORREÇÃO: Simplificado para criar o DF e depois checar se está vazio.
                 dados_registros_semana = stats.get("registros_por_semana")
-                if dados_registros_semana:
-                    # CORREÇÃO: Garante que é um DataFrame
-                    df_registros_semana = pd.DataFrame(dados_registros_semana)
-                    if not df_registros_semana.empty:
-                        # Assumindo que o índice é a semana e a primeira coluna são os valores
-                        fig = px.bar(df_registros_semana, x=df_registros_semana.index, y=df_registros_semana.columns[0],
-                                     title="Registros por Semana", labels={'x': 'Semana', 'y': 'Quantidade'})
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        st.info("Não há dados de registros por semana.")
+                df_registros_semana = pd.DataFrame(dados_registros_semana)
+                if not df_registros_semana.empty:
+                    # Assumindo que o índice é a semana e a primeira coluna são os valores
+                    fig = px.bar(df_registros_semana, x=df_registros_semana.index, y=df_registros_semana.columns[0],
+                                 title="Registros por Semana", labels={'x': 'Semana', 'y': 'Quantidade'})
+                    st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("Não há dados de registros por semana.")
 
             with col2:
                 st.subheader("Disciplinas com mais Lançamentos")
+                # CORREÇÃO: Simplificado para criar o DF e depois checar se está vazio.
                 dados_top_disciplinas = stats.get("top_disciplinas")
-                if dados_top_disciplinas:
-                    # CORREÇÃO: Garante que é um DataFrame
-                    df_top_disciplinas = pd.DataFrame(dados_top_disciplinas)
-                    if not df_top_disciplinas.empty:
-                        st.dataframe(df_top_disciplinas, use_container_width=True, hide_index=True)
-                    else:
-                        st.info("Não há dados de disciplinas disponíveis.")
+                df_top_disciplinas = pd.DataFrame(dados_top_disciplinas)
+                if not df_top_disciplinas.empty:
+                    st.dataframe(df_top_disciplinas, use_container_width=True, hide_index=True)
                 else:
                     st.info("Não há dados de disciplinas disponíveis.")
     else:
         st.info("Ainda não há dados lançados para este escritório.")
+
