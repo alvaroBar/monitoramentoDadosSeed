@@ -1,4 +1,3 @@
-# services/bigquery_service.py
 import streamlit as st
 import pandas as pd
 import pandas_gbq
@@ -65,17 +64,19 @@ class BigQueryService:
             if not df_registros_semana.empty:
                 df_registros_semana = df_registros_semana.set_index('SEMANA')
 
+            # CORREÇÃO: Alterado o alias 'pendencias' para 'PENDENCIAS' para consistência.
             escolas_pendentes_query = f"""
-                SELECT ESCOLA, COUNT(*) as pendencias FROM {self.table_id}
+                SELECT ESCOLA, COUNT(*) as PENDENCIAS FROM {self.table_id}
                 WHERE REGISTRO_DE_AULA IS NULL OR REGISTRO_DE_CONTEUDO IS NULL
-                GROUP BY ESCOLA ORDER BY pendencias DESC LIMIT 5
+                GROUP BY ESCOLA ORDER BY PENDENCIAS DESC LIMIT 5
             """
             df_escolas_pendentes = pandas_gbq.read_gbq(escolas_pendentes_query, project_id=self.project_id, credentials=self.creds)
 
+            # CORREÇÃO: Alterado o alias 'pendencias' para 'PENDENCIAS' para corresponder ao app.py
             municipios_pendentes_query = f"""
-                SELECT MUNICIPIO, COUNT(*) as pendencias FROM {self.table_id}
+                SELECT MUNICIPIO, COUNT(*) as PENDENCIAS FROM {self.table_id}
                 WHERE REGISTRO_DE_AULA IS NULL OR REGISTRO_DE_CONTEUDO IS NULL
-                GROUP BY MUNICIPIO HAVING pendencias > 0 ORDER BY pendencias DESC
+                GROUP BY MUNICIPIO HAVING PENDENCIAS > 0 ORDER BY PENDENCIAS DESC
             """
             df_municipios_pendentes = pandas_gbq.read_gbq(municipios_pendentes_query, project_id=self.project_id, credentials=self.creds)
 
