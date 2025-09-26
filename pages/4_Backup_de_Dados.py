@@ -85,14 +85,18 @@ if hoje.weekday() == DIA_DA_SEMANA_DO_BACKUP and (st.session_state.last_backup_c
             st.error(message)
 
 # Opção de Backup Manual
-if st.button("Executar Backup Manual Agora", use_container_width=True):
-    with st.spinner("Realizando backup manual para o Google Drive..."):
-        success, message = backup_service.execute_backup(st.session_state.dataset_id)
-        if success:
-            st.success(message)
-            st.session_state.last_backup_check = hoje
-        else:
-            st.error(message)
+# MUDANÇA: Colunas para alinhar o botão à direita
+_, col_btn_manual = st.columns([3, 1])
+with col_btn_manual:
+    # MUDANÇA: Removido `use_container_width=True`
+    if st.button("Executar Backup Manual Agora"):
+        with st.spinner("Realizando backup manual para o Google Drive..."):
+            success, message = backup_service.execute_backup(st.session_state.dataset_id)
+            if success:
+                st.success(message)
+                st.session_state.last_backup_check = hoje
+            else:
+                st.error(message)
 
 if 'backup_data' not in st.session_state:
     st.session_state.backup_data = None
@@ -110,15 +114,19 @@ if st.session_state.backup_data is None:
                 options=available_weeks
             )
 
-            if st.button("Buscar Dados para Backup", use_container_width=True, type="primary"):
-                week_filter = selected_weeks if selected_weeks else None
-                with st.spinner("Buscando dados do BigQuery... Isso pode levar algum tempo."):
-                    df_backup = bq_service.get_all_data(week_filter=week_filter)
-                    if not df_backup.empty:
-                        st.session_state.backup_data = df_backup
-                        st.rerun()
-                    else:
-                        st.warning("Nenhum dado encontrado para as semanas selecionadas.")
+            # MUDANÇA: Colunas para alinhar o botão à direita
+            _, col_btn_buscar = st.columns([3, 1])
+            with col_btn_buscar:
+                # MUDANÇA: Removido `use_container_width=True`
+                if st.button("Buscar Dados para Backup", type="primary"):
+                    week_filter = selected_weeks if selected_weeks else None
+                    with st.spinner("Buscando dados do BigQuery... Isso pode levar algum tempo."):
+                        df_backup = bq_service.get_all_data(week_filter=week_filter)
+                        if not df_backup.empty:
+                            st.session_state.backup_data = df_backup
+                            st.rerun()
+                        else:
+                            st.warning("Nenhum dado encontrado para as semanas selecionadas.")
         else:
             st.info("Nenhuma semana encontrada no banco de dados para este usuário.")
     except Exception as e:
@@ -139,24 +147,29 @@ if st.session_state.backup_data is not None:
             if col in df_csv.columns:
                 df_csv[col] = df_csv[col].astype(str).replace('NaT', 'Sem registro')
         csv_data = df_csv.to_csv(index=False).encode('utf-8')
+        # MUDANÇA: Removido `use_container_width=True`
         st.download_button(
             label="📥 Baixar Backup em .csv",
             data=csv_data,
             file_name="backup_relatorios.csv",
-            mime="text/csv",
-            use_container_width=True
+            mime="text/csv"
         )
 
     with col2:
         parquet_data = df_backup.to_parquet(index=False)
+        # MUDANÇA: Removido `use_container_width=True`
         st.download_button(
-            label="⚡️ Baixar Backup em .parquet (Mais Rápido/Leve)",
+            label="⚡️ Baixar em .parquet (Mais Rápido)",
             data=parquet_data,
             file_name="backup_relatorios.parquet",
-            mime="application/octet-stream",
-            use_container_width=True
+            mime="application/octet-stream"
         )
 
-    if st.button("Limpar e Iniciar Nova Busca", use_container_width=True):
-        st.session_state.backup_data = None
-        st.rerun()
+    st.markdown("---")
+    # MUDANÇA: Colunas para alinhar o botão à direita
+    _, col_btn_limpar = st.columns([3, 1])
+    with col_btn_limpar:
+        # MUDANÇA: Removido `use_container_width=True` e definido como `secondary`
+        if st.button("Limpar e Iniciar Nova Busca", type="secondary"):
+            st.session_state.backup_data = None
+            st.rerun()
