@@ -55,9 +55,8 @@ st_autorefresh(interval=10 * 60 * 1000, key="session_refresher_consulta")
 with st.spinner("Carregando opções de filtro..."):
     opcoes_filtro = bq_service.get_filter_options()
 
-# --- Coluna Central para Melhor Estética ---
+# --- Bloco de Filtros Centralizado ---
 _, col_main, _ = st.columns([0.1, 0.8, 0.1])
-
 with col_main:
     with st.container(border=True):
         st.header("Filtros de Busca")
@@ -111,70 +110,71 @@ with col_main:
                 st.session_state.search_results = bq_service.query_data(filters)
                 st.session_state.submitted_form = True
 
+# --- Bloco de Resultados em Largura Total (fora da coluna central) ---
+if 'search_results' in st.session_state and st.session_state.get('submitted_form'):
+    st.markdown("---")
+    with st.container(border=True):
+        st.header("Resultados da Busca")
+        df_results = st.session_state.search_results
 
-    if 'search_results' in st.session_state and st.session_state.get('submitted_form'):
-        with st.container(border=True):
-            st.header("Resultados da Busca")
-            df_results = st.session_state.search_results
+        if not df_results.empty:
+            st.success(f"{len(df_results)} registros encontrados.")
 
-            if not df_results.empty:
-                st.success(f"{len(df_results)} registros encontrados.")
+            def to_excel_auto_width(df):
+                output = io.BytesIO()
+                writer = pd.ExcelWriter(output, engine='openpyxl')
+                df.to_excel(writer, index=False, sheet_name='Resultados')
+                worksheet = writer.sheets['Resultados']
+                for column_cells in worksheet.columns:
+                    max_length = 0
+                    column_letter = get_column_letter(column_cells[0].column)
+                    for cell in column_cells:
+                        try:
+                            if len(str(cell.value)) > max_length:
+                                max_length = len(str(cell.value))
+                        except:
+                            pass
+                    adjusted_width = (max_length + 2)
+                    worksheet.column_dimensions[column_letter].width = adjusted_width
+                writer.close()
+                return output.getvalue()
 
-                def to_excel_auto_width(df):
-                    output = io.BytesIO()
-                    writer = pd.ExcelWriter(output, engine='openpyxl')
-                    df.to_excel(writer, index=False, sheet_name='Resultados')
-                    worksheet = writer.sheets['Resultados']
-                    for column_cells in worksheet.columns:
-                        max_length = 0
-                        column_letter = get_column_letter(column_cells[0].column)
-                        for cell in column_cells:
-                            try:
-                                if len(str(cell.value)) > max_length:
-                                    max_length = len(str(cell.value))
-                            except:
-                                pass
-                        adjusted_width = (max_length + 2)
-                        worksheet.column_dimensions[column_letter].width = adjusted_width
-                    writer.close()
-                    return output.getvalue()
+            df_for_display = df_results.copy()
+            def formatar_e_preencher(valor):
+                if pd.isna(valor): return "Sem registro"
+                return pd.to_datetime(valor).tz_localize(None).strftime('%d/%m/%Y %H:%M:%S')
 
-                df_for_display = df_results.copy()
-                def formatar_e_preencher(valor):
-                    if pd.isna(valor): return "Sem registro"
-                    return pd.to_datetime(valor).tz_localize(None).strftime('%d/%m/%Y %H:%M:%S')
+            for col in ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']:
+                df_for_display[col] = df_for_display[col].apply(formatar_e_preencher)
 
-                for col in ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']:
-                    df_for_display[col] = df_for_display[col].apply(formatar_e_preencher)
+            excel_data = to_excel_auto_width(df_for_display)
 
-                excel_data = to_excel_auto_width(df_for_display)
-
-                _, col_btn_download = st.columns([3,1])
-                with col_btn_download:
-                    st.download_button(
-                        label="Baixar como Excel (.xlsx)",
-                        data=excel_data,
-                        file_name="consulta_relatorios.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True
-                    )
-
-                def highlight_sem_registro(cell_value):
-                    return 'color: red' if cell_value == "Sem registro" else ''
-
-                styled_df = df_for_display.style.applymap(highlight_sem_registro, subset=['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO'])
-
-                st.dataframe(
-                    styled_df,
-                    column_config={
-                        "DATA_DO_RELATORIO": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
-                        "HORARIO": st.column_config.TimeColumn("Horário", format="HH:mm"),
-                        "REGISTRO_DE_AULA": "Registro da Aula",
-                        "REGISTRO_DE_CONTEUDO": "Registro do Conteúdo"
-                    },
-                    use_container_width=True,
-                    hide_index=True
+            _, col_btn_download = st.columns([0.8, 0.2])
+            with col_btn_download:
+                st.download_button(
+                    label="Baixar como Excel (.xlsx)",
+                    data=excel_data,
+                    file_name="consulta_relatorios.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
                 )
-            else:
-                st.info("Nenhum registro encontrado com os filtros selecionados.")
+
+            def highlight_sem_registro(cell_value):
+                return 'color: red' if cell_value == "Sem registro" else ''
+
+            styled_df = df_for_display.style.applymap(highlight_sem_registro, subset=['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO'])
+
+            st.dataframe(
+                styled_df,
+                column_config={
+                    "DATA_DO_RELATORIO": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
+                    "HORARIO": st.column_config.TimeColumn("Horário", format="HH:mm"),
+                    "REGISTRO_DE_AULA": "Registro da Aula",
+                    "REGISTRO_DE_CONTEUDO": "Registro do Conteúdo"
+                },
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("Nenhum registro encontrado com os filtros selecionados.")
 
