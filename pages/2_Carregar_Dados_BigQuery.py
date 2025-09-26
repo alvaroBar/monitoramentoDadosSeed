@@ -83,7 +83,8 @@ if uploaded_parquet:
     ]
     mascara_especifica = pd.Series([False] * len(df_para_envio), index=df_para_envio.index)
     for turma_prefixo, escola in turmas_escolas_excluir:
-        mascara_especifica |= (df_para_envio['TURMA'].str.startswith(turma_prefixo, na=False)) & (df_para_envio['ESCOLA'] == escola)
+        mascara_especifica |= (df_para_envio['TURMA'].str.startswith(turma_prefixo, na=False)) & (
+                    df_para_envio['ESCOLA'] == escola)
 
     turmas_exatas_excluir = ['Sem Seriação - Tarde - A - PROGRAMA ATIVIDADE COMPLEMENTAR CONTRATURNO PERIODICA']
     mascara_exata = df_para_envio['TURMA'].isin(turmas_exatas_excluir)
@@ -104,12 +105,16 @@ if uploaded_parquet:
     st.markdown("---")
     st.write(f"**Total de registros a serem enviados: {len(df_filtrado_final)}**")
 
-    if st.button("Enviar para o BigQuery", use_container_width=True, type="primary"):
-        with st.spinner("Conectando e carregando dados..."):
-            df_preparado = preparar_dataframe_para_bigquery(df_filtrado_final)
-            sucesso = bq_service.carregar_dados(df_preparado, mode='append')
-            if sucesso:
-                st.success(f"Dados da semana {semana_para_envio} enviados com sucesso!")
-                st.balloons()
-            else:
-                st.error("Falha no envio dos dados. Verifique a mensagem de erro acima.")
+    # MUDANÇA: Colunas para alinhar o botão à direita
+    _, col_btn_enviar = st.columns([3, 1])
+    with col_btn_enviar:
+        # MUDANÇA: Removido `use_container_width=True`
+        if st.button("Enviar para o BigQuery", type="primary"):
+            with st.spinner("Conectando e carregando dados..."):
+                df_preparado = preparar_dataframe_para_bigquery(df_filtrado_final)
+                sucesso = bq_service.carregar_dados(df_preparado, mode='append')
+                if sucesso:
+                    st.success(f"Dados da semana {semana_para_envio} enviados com sucesso!")
+                    st.balloons()
+                else:
+                    st.error("Falha no envio dos dados. Verifique a mensagem de erro acima.")
