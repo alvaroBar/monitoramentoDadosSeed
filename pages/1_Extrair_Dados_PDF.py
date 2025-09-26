@@ -11,6 +11,7 @@ import pdfplumber
 import gc
 from services import auth_service
 from streamlit_autorefresh import st_autorefresh
+
 st.set_page_config(
     page_title="1. Extrair Dados (PDF)",
     page_icon="📄",
@@ -37,6 +38,7 @@ else:
     pass
 
 st_autorefresh(interval=10 * 60 * 1000, key="refresher_extração_dados")
+
 
 def extrair_dados_de_pdf(arquivo_pdf, disciplinas_validas):
     """Extrai dados de um arquivo PDF e retorna um DataFrame."""
@@ -93,10 +95,12 @@ def extrair_dados_de_pdf(arquivo_pdf, disciplinas_validas):
                             disciplina_encontrada, registro_aula, registro_conteudo
                         ])
     except Exception as e:
-        st.warning(f"Atenção: Ocorreu um erro ao processar o arquivo '{arquivo_pdf.name}'. Este arquivo será ignorado. (Erro: {e})")
+        st.warning(
+            f"Atenção: Ocorreu um erro ao processar o arquivo '{arquivo_pdf.name}'. Este arquivo será ignorado. (Erro: {e})")
         return pd.DataFrame()
 
-    colunas = ["DATA_DO_RELATORIO", "MUNICIPIO", "ESCOLA", "TURMA", "HORARIO", "DISCIPLINA", "REGISTRO_DE_AULA", "REGISTRO_DE_CONTEUDO"]
+    colunas = ["DATA_DO_RELATORIO", "MUNICIPIO", "ESCOLA", "TURMA", "HORARIO", "DISCIPLINA", "REGISTRO_DE_AULA",
+               "REGISTRO_DE_CONTEUDO"]
     return pd.DataFrame(dados_extraidos, columns=colunas)
 
 
@@ -107,21 +111,23 @@ if 'cancel_extraction' not in st.session_state:
     st.session_state.cancel_extraction = False
 
 # --- Interface ---
-st.info("Esta página lê os arquivos PDF e consolida os dados. Ao final, baixe o arquivo gerado para usar na próxima etapa.")
+st.info(
+    "Esta página lê os arquivos PDF e consolida os dados. Ao final, baixe o arquivo gerado para usar na próxima etapa.")
 
 is_disabled = st.session_state.processing
 col1, col2 = st.columns(2)
 with col1:
-    uploaded_files = st.file_uploader("Selecione os arquivos PDF para extração", type="pdf", accept_multiple_files=True, disabled=is_disabled)
+    uploaded_files = st.file_uploader("Selecione os arquivos PDF para extração", type="pdf", accept_multiple_files=True,
+                                      disabled=is_disabled)
 with col2:
     disciplinas_file = st.file_uploader("Selecione a planilha de disciplinas", type=["xlsx"], disabled=is_disabled)
 
-# CORREÇÃO: Colunas para alinhar o botão à direita
-_, col_btn = st.columns([3, 1]) # O primeiro elemento (underscore) é um espaçador
+# Colunas para alinhar o botão à direita
+_, col_btn = st.columns([3, 1])  # O primeiro elemento (underscore) é um espaçador
 action_placeholder = col_btn.empty()
 
 if uploaded_files and disciplinas_file and not st.session_state.processing:
-    # CORREÇÃO: Removido `use_container_width=True` para o botão ter tamanho normal
+    # Removido `use_container_width=True` para o botão ter tamanho normal
     if action_placeholder.button(f"Iniciar Extração de {len(uploaded_files)} Arquivos", type="primary"):
         st.session_state.processing = True
         st.session_state.cancel_extraction = False
@@ -130,7 +136,7 @@ if uploaded_files and disciplinas_file and not st.session_state.processing:
         st.rerun()
 
 if st.session_state.processing:
-    # CORREÇÃO: Removido `use_container_width=True` para o botão ter tamanho normal
+    # Removido `use_container_width=True` para o botão ter tamanho normal
     if action_placeholder.button("Cancelar Processo"):
         st.session_state.cancel_extraction = True
 
@@ -171,11 +177,17 @@ if 'final_df' in st.session_state and not st.session_state.processing:
     st.success(f"Extração Concluída! {len(df_final)} registros foram lidos.")
     st.dataframe(df_final.head())
     parquet_data = df_final.to_parquet(index=False)
-    st.download_button(
-        label="📥 Baixar Arquivo de Dados (.parquet)",
-        data=parquet_data,
-        file_name="dados_extraidos.parquet",
-        mime="application/octet-stream",
-        use_container_width=True,
-        help="Clique para baixar o arquivo. Em seguida, vá para a página 'Carregar Dados para o BigQuery'."
-    )
+
+    # CORREÇÃO: Colunas para alinhar o botão de download à direita
+    _, col_download_btn = st.columns([3, 1])
+    with col_download_btn:
+        st.download_button(
+            label="📥 Baixar Arquivo de Dados (.parquet)",
+            data=parquet_data,
+            file_name="dados_extraidos.parquet",
+            mime="application/octet-stream",
+            # CORREÇÃO: Removido use_container_width e adicionado type="primary"
+            type="primary",
+            help="Clique para baixar o arquivo. Em seguida, vá para a página 'Carregar Dados para o BigQuery'."
+        )
+
