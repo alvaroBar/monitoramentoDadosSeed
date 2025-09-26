@@ -84,8 +84,13 @@ if 'user_info' in st.session_state:
         sem_registro_aula = stats.get('sem_registro_aula', 0)
         sem_registro_conteudo = stats.get('sem_registro_conteudo', 0)
         taxa_adesao_aula = ((total_registros - sem_registro_aula) / total_registros) * 100 if total_registros > 0 else 0
-        taxa_adesao_conteudo = ((total_registros - sem_registro_conteudo) / total_registros) * 100 if total_registros > 0 else 0
-        df_escolas_pendentes = stats.get("escolas_com_pendencias")
+        taxa_adesao_conteudo = ((
+                                            total_registros - sem_registro_conteudo) / total_registros) * 100 if total_registros > 0 else 0
+
+        # Garante a conversão para DataFrame
+        dados_escolas_pendentes = stats.get("escolas_com_pendencias")
+        df_escolas_pendentes = pd.DataFrame(dados_escolas_pendentes) if dados_escolas_pendentes else pd.DataFrame()
+
         num_escolas_pendentes = stats.get("total_escolas_com_pendencias", 0)
         ultima_semana = stats.get("ultima_semana_lancada", 0)
 
@@ -93,15 +98,22 @@ if 'user_info' in st.session_state:
         st.markdown("### 📌 Visão Geral")
         col1, col2, col3, col4, col5 = st.columns(5)
         with col1:
-            st.markdown(f"<div class='metric-card'><p>Total de Registros</p><h2>{total_registros:,}</h2></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='metric-card'><p>Total de Registros</p><h2>{total_registros:,}</h2></div>",
+                        unsafe_allow_html=True)
         with col2:
-            st.markdown(f"<div class='metric-card'><p>Adesão de Aulas</p><h2>{taxa_adesao_aula:.1f}%</h2></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='metric-card'><p>Adesão de Aulas</p><h2>{taxa_adesao_aula:.1f}%</h2></div>",
+                        unsafe_allow_html=True)
         with col3:
-            st.markdown(f"<div class='metric-card'><p>Adesão de Conteúdos</p><h2>{taxa_adesao_conteudo:.1f}%</h2></div>", unsafe_allow_html=True)
+            st.markdown(
+                f"<div class='metric-card'><p>Adesão de Conteúdos</p><h2>{taxa_adesao_conteudo:.1f}%</h2></div>",
+                unsafe_allow_html=True)
         with col4:
-            st.markdown(f"<div class='metric-card'><p>Escolas com Pendências</p><h2>{num_escolas_pendentes}</h2></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='metric-card'><p>Escolas com Pendências</p><h2>{num_escolas_pendentes}</h2></div>",
+                        unsafe_allow_html=True)
         with col5:
-            st.markdown(f"<div class='metric-card'><p>Última Semana</p><h2>{int(ultima_semana) if ultima_semana else 0}</h2></div>", unsafe_allow_html=True)
+            st.markdown(
+                f"<div class='metric-card'><p>Última Semana</p><h2>{int(ultima_semana) if ultima_semana else 0}</h2></div>",
+                unsafe_allow_html=True)
 
         # ------------------ Abas ------------------
         tab1, tab2 = st.tabs(["🏫 Pendências", "📊 Análises Gerais"])
@@ -110,16 +122,22 @@ if 'user_info' in st.session_state:
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("Top 5 Escolas com Mais Pendências")
-                if df_escolas_pendentes is not None and not df_escolas_pendentes.empty:
+                if not df_escolas_pendentes.empty:
                     st.dataframe(df_escolas_pendentes, use_container_width=True, hide_index=True)
                 else:
                     st.info("Nenhuma escola com pendências encontrada.")
             with col2:
                 st.subheader("Pendências por Município")
-                df_municipios_pendentes = stats.get("pendencias_por_municipio")
-                if df_municipios_pendentes is not None and not df_municipios_pendentes.empty:
-                    fig = px.bar(df_municipios_pendentes, x="MUNICIPIO", y="PENDENCIAS", title="Pendências por Município")
-                    st.plotly_chart(fig, use_container_width=True)
+                dados_municipios = stats.get("pendencias_por_municipio")
+                if dados_municipios:
+                    # CORREÇÃO: Converte os dados para um DataFrame antes de usar
+                    df_municipios_pendentes = pd.DataFrame(dados_municipios)
+                    if not df_municipios_pendentes.empty:
+                        fig = px.bar(df_municipios_pendentes, x="MUNICIPIO", y="PENDENCIAS",
+                                     title="Pendências por Município")
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.info("Nenhum município com pendências encontrado.")
                 else:
                     st.info("Nenhum município com pendências encontrado.")
 
@@ -127,19 +145,31 @@ if 'user_info' in st.session_state:
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("Lançamentos por Semana")
-                df_registros_semana = stats.get("registros_por_semana")
-                if df_registros_semana is not None and not df_registros_semana.empty:
-                    fig = px.bar(df_registros_semana, x=df_registros_semana.index, y=df_registros_semana.columns[0], title="Registros por Semana")
-                    st.plotly_chart(fig, use_container_width=True)
+                dados_registros_semana = stats.get("registros_por_semana")
+                if dados_registros_semana:
+                    # CORREÇÃO: Garante que é um DataFrame
+                    df_registros_semana = pd.DataFrame(dados_registros_semana)
+                    if not df_registros_semana.empty:
+                        # Assumindo que o índice é a semana e a primeira coluna são os valores
+                        fig = px.bar(df_registros_semana, x=df_registros_semana.index, y=df_registros_semana.columns[0],
+                                     title="Registros por Semana", labels={'x': 'Semana', 'y': 'Quantidade'})
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.info("Não há dados de registros por semana.")
                 else:
                     st.info("Não há dados de registros por semana.")
+
             with col2:
                 st.subheader("Disciplinas com mais Lançamentos")
-                df_top_disciplinas = stats.get("top_disciplinas")
-                if df_top_disciplinas is not None and not df_top_disciplinas.empty:
-                    st.dataframe(df_top_disciplinas, use_container_width=True, hide_index=True)
+                dados_top_disciplinas = stats.get("top_disciplinas")
+                if dados_top_disciplinas:
+                    # CORREÇÃO: Garante que é um DataFrame
+                    df_top_disciplinas = pd.DataFrame(dados_top_disciplinas)
+                    if not df_top_disciplinas.empty:
+                        st.dataframe(df_top_disciplinas, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Não há dados de disciplinas disponíveis.")
                 else:
                     st.info("Não há dados de disciplinas disponíveis.")
-
     else:
         st.info("Ainda não há dados lançados para este escritório.")
