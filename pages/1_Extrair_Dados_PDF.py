@@ -116,10 +116,13 @@ with col1:
 with col2:
     disciplinas_file = st.file_uploader("Selecione a planilha de disciplinas", type=["xlsx"], disabled=is_disabled)
 
-action_placeholder = st.empty()
+# CORREÇÃO: Colunas para alinhar o botão à direita
+_, col_btn = st.columns([3, 1]) # O primeiro elemento (underscore) é um espaçador
+action_placeholder = col_btn.empty()
 
 if uploaded_files and disciplinas_file and not st.session_state.processing:
-    if action_placeholder.button(f"Iniciar Extração de {len(uploaded_files)} Arquivos", use_container_width=True, type="primary"):
+    # CORREÇÃO: Removido `use_container_width=True` para o botão ter tamanho normal
+    if action_placeholder.button(f"Iniciar Extração de {len(uploaded_files)} Arquivos", type="primary"):
         st.session_state.processing = True
         st.session_state.cancel_extraction = False
         if 'final_df' in st.session_state:
@@ -127,7 +130,8 @@ if uploaded_files and disciplinas_file and not st.session_state.processing:
         st.rerun()
 
 if st.session_state.processing:
-    if action_placeholder.button("Cancelar Processo", use_container_width=True):
+    # CORREÇÃO: Removido `use_container_width=True` para o botão ter tamanho normal
+    if action_placeholder.button("Cancelar Processo"):
         st.session_state.cancel_extraction = True
 
     try:
