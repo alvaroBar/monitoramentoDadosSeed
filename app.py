@@ -87,7 +87,6 @@ if 'user_info' in st.session_state:
         taxa_adesao_conteudo = ((
                                             total_registros - sem_registro_conteudo) / total_registros) * 100 if total_registros > 0 else 0
 
-        # CORREÇÃO: Cria o DataFrame diretamente. pd.DataFrame() lida com None, listas vazias ou outros DataFrames.
         dados_escolas_pendentes = stats.get("escolas_com_pendencias")
         df_escolas_pendentes = pd.DataFrame(dados_escolas_pendentes)
 
@@ -128,13 +127,18 @@ if 'user_info' in st.session_state:
                     st.info("Nenhuma escola com pendências encontrada.")
             with col2:
                 st.subheader("Pendências por Município")
-                # CORREÇÃO: Simplificado para criar o DF e depois checar se está vazio.
                 dados_municipios = stats.get("pendencias_por_municipio")
                 df_municipios_pendentes = pd.DataFrame(dados_municipios)
                 if not df_municipios_pendentes.empty:
-                    fig = px.bar(df_municipios_pendentes, x="MUNICIPIO", y="PENDENCIAS",
-                                 title="Pendências por Município")
-                    st.plotly_chart(fig, use_container_width=True)
+                    # CORREÇÃO: Verifica se as colunas necessárias existem antes de plotar
+                    required_cols = ["MUNICIPIO", "PENDENCIAS"]
+                    if all(col in df_municipios_pendentes.columns for col in required_cols):
+                        fig = px.bar(df_municipios_pendentes, x="MUNICIPIO", y="PENDENCIAS",
+                                     title="Pendências por Município")
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.warning(
+                            f"Os dados de pendências por município não estão no formato esperado. Colunas necessárias: {required_cols}.")
                 else:
                     st.info("Nenhum município com pendências encontrado.")
 
@@ -142,7 +146,6 @@ if 'user_info' in st.session_state:
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("Lançamentos por Semana")
-                # CORREÇÃO: Simplificado para criar o DF e depois checar se está vazio.
                 dados_registros_semana = stats.get("registros_por_semana")
                 df_registros_semana = pd.DataFrame(dados_registros_semana)
                 if not df_registros_semana.empty:
@@ -155,7 +158,6 @@ if 'user_info' in st.session_state:
 
             with col2:
                 st.subheader("Disciplinas com mais Lançamentos")
-                # CORREÇÃO: Simplificado para criar o DF e depois checar se está vazio.
                 dados_top_disciplinas = stats.get("top_disciplinas")
                 df_top_disciplinas = pd.DataFrame(dados_top_disciplinas)
                 if not df_top_disciplinas.empty:
