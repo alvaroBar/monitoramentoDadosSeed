@@ -21,10 +21,10 @@ def get_google_auth_flow():
     )
 
 
-# services/auth_service.py -> Substitua a função inteira por esta
+# services/auth_service.py -> SUBSTITUA A FUNÇÃO INTEIRA POR ESTA
 
 def autenticar_usuario():
-    """Gerencia o fluxo de login do usuário, com tentativa de login automático."""
+    """Gerencia o fluxo de login do usuário, exibindo um botão para iniciar."""
     # Se já possui credenciais na sessão, o usuário já está logado.
     if 'credentials' in st.session_state:
         return
@@ -49,22 +49,12 @@ def autenticar_usuario():
             st.error(f"Erro ao obter o token de acesso: {e}")
             st.stop()
     else:
-        # Etapa 1: O usuário acedeu à página sem estar logado
+        # Etapa 1: O usuário não está logado. Mostra o botão de login.
         auth_url, _ = flow.authorization_url(prompt="select_account")
 
-        # Lógica de login automático:
-        # Verifica se já tentamos o login automático nesta sessão para evitar loops
-        if not st.session_state.get("login_attempted", False):
-            st.session_state.login_attempted = True
-            # Usa um meta refresh para redirecionar o usuário para a URL de login do Google
-            st.html(f'<meta http-equiv="refresh" content="0;URL=\'{auth_url}\'">')
-            st.stop()
-        else:
-            # Se a tentativa automática falhou (usuário não estava logado no Google),
-            # exibe o botão para login manual.
-            st.link_button("Login com Google", auth_url, use_container_width=True, type="primary")
-            st.info("ℹ️ Para aceder, por favor, faça o login com a sua conta Google.")
-            st.stop()
+        st.link_button("Login com Google", auth_url, use_container_width=True, type="primary")
+        st.info("ℹ️ Para aceder, por favor, faça o login com a sua conta Google.")
+        st.stop()
 
 
 # (A função get_google_auth_flow e a de logout permanecem as mesmas)
