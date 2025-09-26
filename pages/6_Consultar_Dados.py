@@ -10,6 +10,7 @@ import io
 from streamlit_autorefresh import st_autorefresh
 from services import auth_service
 from services.bigquery_service import BigQueryService
+from openpyxl.utils import get_column_letter
 
 st.set_page_config(layout="wide")
 st.title("Consulta Avançada de Dados 🔎")
@@ -111,13 +112,12 @@ if 'search_results' in st.session_state and st.session_state.get('submitted_form
 
         # --- LÓGICA DE ESTILIZAÇÃO E DOWNLOAD ATUALIZADA ---
 
-        # 1. Prepara um DataFrame para exibição e download
+        # 1. Prepara um DataFrame para exibição e download (sem alteração)
         df_for_display = df_results.copy()
 
 
         def formatar_e_preencher(valor):
-            if pd.isna(valor):
-                return "Sem registro"
+            if pd.isna(valor): return "Sem registro"
             return pd.to_datetime(valor).tz_localize(None).strftime('%d/%m/%Y %H:%M:%S')
 
 
@@ -125,26 +125,51 @@ if 'search_results' in st.session_state and st.session_state.get('submitted_form
             df_for_display[col] = df_for_display[col].apply(formatar_e_preencher)
 
 
-        # 2. Define a função de estilo que reage ao TEXTO
+        # 2. Define a função de estilo que reage ao TEXTO (sem alteração)
         def highlight_sem_registro(cell_value):
             return 'color: red' if cell_value == "Sem registro" else ''
 
 
-        # 3. Aplica o estilo ao DataFrame
+        # 3. Aplica o estilo ao DataFrame (sem alteração)
         styled_df = df_for_display.style.applymap(highlight_sem_registro,
                                                   subset=['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO'])
 
-        # 4. ALTERADO: Lógica do botão de download para gerar um arquivo Excel (.xlsx)
-        output = io.BytesIO()
-        # O Styler (styled_df) consegue escrever a formatação para um arquivo Excel
-        styled_df.to_excel(output, engine='openpyxl', index=False)
-        excel_data = output.getvalue()
+
+        # 4. NOVA LÓGICA DE DOWNLOAD para gerar Excel com colunas auto-ajustadas
+
+        # Função auxiliar para criar o Excel com largura automática
+        def to_excel_auto_width(df_styled):
+            output = io.BytesIO()
+            writer = pd.ExcelWriter(output, engine='openpyxl')
+            df_styled.to_excel(writer, index=False, sheet_name='Resultados')
+
+            # Acessa a planilha criada pelo pandas
+            worksheet = writer.sheets['Resultados']
+
+            # Itera sobre as colunas e ajusta a largura
+            for column_cells in worksheet.columns:
+                max_length = 0
+                column_letter = get_column_letter(column_cells[0].column)
+                for cell in column_cells:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                adjusted_width = (max_length + 2)
+                worksheet.column_dimensions[column_letter].width = adjusted_width
+
+            writer.close()
+            return output.getvalue()
+
+
+        excel_data = to_excel_auto_width(styled_df)
 
         st.download_button(
             label="📥 Baixar resultados como Excel (.xlsx)",
             data=excel_data,
-            file_name="consulta_relatorios.xlsx",  # Nome do arquivo alterado
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",  # Tipo do arquivo alterado
+            file_name="consulta_relatorios.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
 
