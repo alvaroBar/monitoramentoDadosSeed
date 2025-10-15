@@ -50,7 +50,13 @@ def autenticar_usuario():
             st.stop()
     else:
         # Etapa 1: O usuário não está logado. Mostra o botão de login.
-        auth_url, _ = flow.authorization_url(prompt="select_account")
+        # --- CORREÇÃO APLICADA AQUI ---
+        # Adiciona access_type='offline' para solicitar o refresh_token para sessões longas.
+        auth_url, _ = flow.authorization_url(
+            access_type='offline',
+            include_granted_scopes='true',
+            prompt="select_account"
+        )
 
         st.link_button("Login com Google", auth_url, use_container_width=True, type="primary")
         st.info("ℹ️ Para aceder, por favor, faça o login com a sua conta Google.")
