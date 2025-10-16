@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: p7_Auditoria_Comparativa.py
-# VERSÃO REVISADA: Adicionada exportação para Excel com auto-ajuste de colunas.
+# VERSÃO REVISADA: Corrigido o NameError e a lógica de exibição de relatórios salvos.
 # ==============================================================================
 
 import streamlit as st
@@ -52,13 +52,15 @@ bq_service = st.session_state.bq_service
 st_autorefresh(interval=10 * 60 * 1000, key="session_refresher_auditoria")
 
 
-# --- FUNÇÕES AUXILIARES ---
+# --- FUNÇÕES AUXILIARES GLOBAIS ---
 
-def to_excel_auto_width(df_styled):
-    """Converte um DataFrame estilizado para um arquivo Excel com auto-ajuste de colunas."""
+def to_excel_auto_width(df):
+    """Converte um DataFrame para um arquivo Excel com auto-ajuste de colunas."""
     output = io.BytesIO()
     writer = pd.ExcelWriter(output, engine='openpyxl')
-    df_styled.to_excel(writer, index=False, sheet_name='Resultados')
+    # Se for um Styler object, usa .data para pegar o DataFrame
+    df_data = df.data if isinstance(df, pd.io.formats.style.Styler) else df
+    df_data.to_excel(writer, index=False, sheet_name='Resultados')
     worksheet = writer.sheets['Resultados']
     for column_cells in worksheet.columns:
         max_length = 0
@@ -75,8 +77,18 @@ def to_excel_auto_width(df_styled):
     return output.getvalue()
 
 
+def formatar_valor(valor):
+    """Formata valores de data/hora ou retorna 'Sem registro' para nulos."""
+    return "Sem registro" if pd.isna(valor) else pd.to_datetime(valor).strftime('%d/%m/%Y %H:%M:%S')
+
+
+def highlight_sem_registro(cell):
+    """Aplica cor vermelha à célula se o texto for 'Sem registro'."""
+    return 'color: red; font-weight: bold;' if cell == "Sem registro" else ''
+
+
 def apagar_tabela_auditoria(bq_service, nome_tabela):
-    """Apaga uma tabela de auditoria do BigQuery (Idealmente, esta função estaria no BigQueryService)."""
+    """Apaga uma tabela de auditoria do BigQuery."""
     try:
         client = bigquery.Client(credentials=bq_service.creds, project=bq_service.project_id)
         table_ref = f"{bq_service.project_id}.{bq_service.dataset_id}.{nome_tabela}"
@@ -134,7 +146,8 @@ with col_main:
                                                                                                   selected_weeks,
                                                                                                   df_from_parquet)
                                         if sucesso:
-                                            st.success(msg); st.balloons()
+                                            st.success(msg);
+                                            st.balloons()
                                         else:
                                             st.error(msg)
                                 else:
@@ -164,23 +177,11 @@ with col_main:
 
             if not df_pendencias.empty:
                 df_for_display = df_pendencias.copy()
+                for col in ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']:
+                    df_for_display[col] = df_for_display[col].apply(formatar_valor)
 
-
-                def formatar_valor(valor):
-                    return "Sem registro" if pd.isna(valor) else pd.to_datetime(valor).tz_localize(None).strftime(
-                        '%d/%m/%Y %H:%M:%S')
-
-
-                for col in ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']: df_for_display[col] = df_for_display[
-                    col].apply(formatar_valor)
-
-
-                def highlight_sem_registro(cell):
-                    return 'color: red' if cell == "Sem registro" else ''
-
-
-                styled_df = df_for_display.style.applymap(highlight_sem_registro,
-                                                          subset=['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO'])
+                styled_df = df_for_display.style.apply(lambda s: s.map(highlight_sem_registro),
+                                                       subset=['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO'])
 
                 _, col_btn_download_val = st.columns([3, 1])
                 with col_btn_download_val:
@@ -231,23 +232,16 @@ with col_main:
                     col3.metric("Conteúdos sem Registro", f"{counts.get('total_sem_conteudo', 0):,}".replace(",", "."))
 
                     if not df_details.empty:
-                        st.subheader("Detalhes das Pendências")
-                        df_display = df_details.copy()
-                        for col in ['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO']: df_display[col] = df_display[
-                            col].apply(formatar_valor)
-                        styled_df = df_display.style.applymap(highlight_sem_registro,
-                                                              subset=['REGISTRO_DE_AULA', 'REGISTRO_DE_CONTEUDO'])
+                        st.subheader("Detalhes das Pendências (Agrupado)")
 
                         _, col_btn_download_saved = st.columns([3, 1])
                         with col_btn_download_saved:
-                            st.download_button("Baixar detalhes (.xlsx)", to_excel_auto_width(styled_df),
+                            st.download_button("Baixar detalhes (.xlsx)", to_excel_auto_width(df_details),
                                                f"{selected_table}_detalhes.xlsx",
                                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                                use_container_width=True)
 
-                        st.dataframe(styled_df, use_container_width=True, hide_index=True, column_config={
-                            "DATA_DO_RELATORIO": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
-                            "HORARIO": st.column_config.TimeColumn("Horário", format="HH:mm")})
+                        st.dataframe(df_details, use_container_width=True, hide_index=True)
 
                 # --- ZONA DE PERIGO: APAGAR AUDITORIA ---
                 st.markdown("---")
