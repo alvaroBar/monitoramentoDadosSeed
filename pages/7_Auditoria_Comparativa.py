@@ -1,6 +1,6 @@
 # ==============================================================================
 # ARQUIVO DA PÁGINA: p7_Auditoria_Comparativa.py
-# VERSÃO REVISADA: Corrigido o NameError e a lógica de exibição de relatórios salvos.
+# VERSÃO REVISADA: Corrigido o AttributeError na função to_excel_auto_width.
 # ==============================================================================
 
 import streamlit as st
@@ -54,12 +54,20 @@ st_autorefresh(interval=10 * 60 * 1000, key="session_refresher_auditoria")
 
 # --- FUNÇÕES AUXILIARES GLOBAIS ---
 
-def to_excel_auto_width(df):
-    """Converte um DataFrame para um arquivo Excel com auto-ajuste de colunas."""
+# --- FUNÇÃO CORRIGIDA ---
+def to_excel_auto_width(df_or_styler):
+    """Converte um DataFrame ou Styler para Excel com auto-ajuste de colunas."""
     output = io.BytesIO()
     writer = pd.ExcelWriter(output, engine='openpyxl')
-    # Se for um Styler object, usa .data para pegar o DataFrame
-    df_data = df.data if isinstance(df, pd.io.formats.style.Styler) else df
+
+    # Lógica de extração do DataFrame mais segura
+    if hasattr(df_or_styler, 'data'):
+        # Provavelmente é um objeto Styler, pega o DataFrame interno
+        df_data = df_or_styler.data
+    else:
+        # Assume que já é um DataFrame
+        df_data = df_or_styler
+
     df_data.to_excel(writer, index=False, sheet_name='Resultados')
     worksheet = writer.sheets['Resultados']
     for column_cells in worksheet.columns:
@@ -261,3 +269,4 @@ with col_main:
                                 st.rerun()
                             else:
                                 st.error(mensagem)
+
