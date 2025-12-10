@@ -4,6 +4,7 @@ streamlit
 pandas
 pdfplumber
 openpyxl
+xlsxwriter
 google-cloud-bigquery
 pandas-gbq
 google-auth-oauthlib
