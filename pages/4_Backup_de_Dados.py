@@ -11,9 +11,11 @@ from streamlit_autorefresh import st_autorefresh
 from services.drive_service import DriveService
 from services.backup_service import BackupService
 from datetime import datetime
+from utils import interface
 
 st.set_page_config(layout="wide")
 st.title("Backup de Dados do BigQuery 💾")
+interface.exibir_cabecalho_ano()
 
 # 1. Autenticação e inicialização padrão
 auth_service.autenticar_usuario()

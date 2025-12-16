@@ -12,6 +12,7 @@ import gc
 import io  # Necessário para criar os arquivos Excel/CSV em memória
 from services import auth_service
 from streamlit_autorefresh import st_autorefresh
+from utils import interface
 
 # Configuração da página
 st.set_page_config(
@@ -21,6 +22,7 @@ st.set_page_config(
 )
 
 st.title("📄 1. Extrair Dados (PDF)")
+interface.exibir_cabecalho_ano()
 
 # --- Autenticação e Sidebar ---
 auth_service.autenticar_usuario()

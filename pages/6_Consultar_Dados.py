@@ -11,12 +11,14 @@ from streamlit_autorefresh import st_autorefresh
 from services import auth_service
 from services.bigquery_service import BigQueryService
 from openpyxl.utils import get_column_letter
+from utils import interface
 
 # Aumenta o limite de células que podem ser estilizadas pelo Pandas
 pd.set_option("styler.render.max_elements", 500000)
 
 st.set_page_config(layout="wide")
 st.title("Consulta Avançada de Dados 🔎")
+interface.exibir_cabecalho_ano()
 
 # 1. Autenticação e inicialização padrão
 auth_service.autenticar_usuario()

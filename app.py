@@ -4,6 +4,10 @@ import plotly.express as px
 from services import auth_service
 from services.bigquery_service import BigQueryService
 from streamlit_autorefresh import st_autorefresh
+import datetime
+import time  # Adicionado para controle de fluxo na troca de ano
+from utils import config
+from utils import interface
 
 # ------------------ Configuração da Página ------------------
 st.set_page_config(
@@ -36,6 +40,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("📊 Dashboard de Monitoramento")
+interface.exibir_cabecalho_ano()
 
 # ------------------ Autenticação ------------------
 auth_service.autenticar_usuario()
@@ -57,17 +62,58 @@ if 'user_info' in st.session_state:
         st.error("ERRO DE CONFIGURAÇÃO: O mapeamento [office_mapping] não foi encontrado.")
         st.stop()
 
-    # Sidebar
+    # ------------------ Sidebar com Seletor de Ano ------------------
     with st.sidebar:
         st.subheader(f"👋 Olá, {user_name}")
         st.caption(f"Dataset ativo: `{st.session_state.dataset_id}`")
+
+        st.divider()
+        st.header("📅 Ano de Referência")
+
+        # 1. Inicializa o ano na sessão se não existir (Padrão: Ano Atual)
+        if 'ano_letivo' not in st.session_state:
+            st.session_state['ano_letivo'] = datetime.datetime.now().year
+
+        # 2. Define o índice padrão do selectbox baseado na sessão
+        try:
+            # Tenta achar o ano da sessão na lista configurada
+            index_padrao = config.ANOS_DISPONIVEIS.index(st.session_state['ano_letivo'])
+        except (ValueError, AttributeError):
+            # Se der erro (ex: ano atual não está na lista), usa o primeiro da lista
+            index_padrao = 0
+
+        # 3. Cria o Seletor
+        ano_selecionado = st.selectbox(
+            "Trabalhar com dados de:",
+            options=config.ANOS_DISPONIVEIS,
+            index=index_padrao,
+            help="O sistema seleciona automaticamente o ano atual. Mude apenas para consultar ou corrigir anos anteriores."
+        )
+
+        # 4. Lógica de Troca de Ano
+        if ano_selecionado != st.session_state['ano_letivo']:
+            st.session_state['ano_letivo'] = ano_selecionado
+
+            # CRÍTICO: Remove o serviço antigo da memória para forçar reconexão na nova tabela
+            if 'bq_service' in st.session_state:
+                del st.session_state['bq_service']
+
+            st.toast(f"Carregando base de dados de {ano_selecionado}...", icon="🔄")
+            time.sleep(1)  # Pausa breve para o usuário ver o aviso
+            st.rerun()
+
+        st.caption(f"📌 Tabela: `relatorios_lrco_{ano_selecionado}`")
+        st.divider()
+
         if st.button("🔒 Logout"):
             auth_service.logout_usuario()
 
     # Mantém a sessão ativa
     st_autorefresh(interval=5 * 60 * 1000, key="session_refresher_dashboard")
 
-    # Serviço BigQuery
+    # ------------------ Inicialização do Serviço BigQuery ------------------
+    # Como deletamos 'bq_service' na sidebar ao trocar o ano, este bloco rodará novamente
+    # criando uma nova instância que aponta para a tabela do ano correto.
     if 'bq_service' not in st.session_state:
         st.session_state.bq_service = BigQueryService(
             credentials=st.session_state.credentials,
@@ -76,7 +122,7 @@ if 'user_info' in st.session_state:
     bq_service = st.session_state.bq_service
 
     # ------------------ Estatísticas ------------------
-    with st.spinner("🔄 Carregando estatísticas..."):
+    with st.spinner(f"🔄 Carregando estatísticas de {st.session_state['ano_letivo']}..."):
         stats = bq_service.get_dashboard_stats()
 
     if stats and stats.get('total_registros', 0) > 0:
@@ -94,7 +140,7 @@ if 'user_info' in st.session_state:
         ultima_semana = stats.get("ultima_semana_lancada", 0)
 
         # ------------------ KPIs ------------------
-        st.markdown("### 📌 Visão Geral")
+        st.markdown(f"### 📌 Visão Geral ({st.session_state['ano_letivo']})")
         col1, col2, col3, col4, col5 = st.columns(5)
         with col1:
             st.markdown(f"<div class='metric-card'><p>Total de Registros</p><h2>{total_registros:,}</h2></div>",
@@ -130,7 +176,6 @@ if 'user_info' in st.session_state:
                 dados_municipios = stats.get("pendencias_por_municipio")
                 df_municipios_pendentes = pd.DataFrame(dados_municipios)
                 if not df_municipios_pendentes.empty:
-                    # CORREÇÃO: Verifica se as colunas necessárias existem antes de plotar
                     required_cols = ["MUNICIPIO", "PENDENCIAS"]
                     if all(col in df_municipios_pendentes.columns for col in required_cols):
                         fig = px.bar(df_municipios_pendentes, x="MUNICIPIO", y="PENDENCIAS",
@@ -149,7 +194,6 @@ if 'user_info' in st.session_state:
                 dados_registros_semana = stats.get("registros_por_semana")
                 df_registros_semana = pd.DataFrame(dados_registros_semana)
                 if not df_registros_semana.empty:
-                    # Assumindo que o índice é a semana e a primeira coluna são os valores
                     fig = px.bar(df_registros_semana, x=df_registros_semana.index, y=df_registros_semana.columns[0],
                                  title="Registros por Semana", labels={'x': 'Semana', 'y': 'Quantidade'})
                     st.plotly_chart(fig, use_container_width=True)
@@ -165,5 +209,4 @@ if 'user_info' in st.session_state:
                 else:
                     st.info("Não há dados de disciplinas disponíveis.")
     else:
-        st.info("Ainda não há dados lançados para este escritório.")
-
+        st.info(f"Ainda não há dados lançados para o ano de {st.session_state['ano_letivo']}.")

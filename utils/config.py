@@ -1,5 +1,9 @@
 # utils/config.py
 import streamlit as st
+import datetime
+
+ANO_ATUAL = datetime.datetime.now().year
+ANOS_DISPONIVEIS = [ANO_ATUAL - 1, ANO_ATUAL, ANO_ATUAL + 1]
 
 try:
     # Configurações de Autenticação

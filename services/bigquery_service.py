@@ -9,19 +9,44 @@ import datetime  # Adicionado para a função de consulta
 class BigQueryService:
     def __init__(self, credentials, dataset_id):
         if not credentials:
-            raise ValueError("Credenciais são necessárias para inicializar o BigQueryService.")
+            raise ValueError("Credenciais necessárias.")
         self.creds = credentials
         self.dataset_id = dataset_id
         self.project_id = config.PROJECT_ID
-        self.table_id = f"`{self.project_id}.{self.dataset_id}.relatorios_lrco`"
 
-    # --- Métodos de Escrita e Deleção ---
+        # LÓGICA DE SELEÇÃO DE TABELA
+        # Tenta pegar da sessão. Se for um script rodando fora do Streamlit, usa o ano do sistema.
+        if 'ano_letivo' in st.session_state:
+            self.ano_vigente = st.session_state['ano_letivo']
+        else:
+            self.ano_vigente = datetime.datetime.now().year
 
-    def carregar_dados(self, df: pd.DataFrame, table_name='relatorios_lrco', mode='append'):
-        destination_table = f"{self.dataset_id}.{table_name}"
+        # Define o ID da tabela com o SUFIXO do ano
+        # Alterar o nome da tabela para a utilizada pelo nome em produção
+        self.table_name_base = f"relatorios_lrco_alvaro_{self.ano_vigente}"
+        self.table_id = f"`{self.project_id}.{self.dataset_id}.{self.table_name_base}`"
+
+    def carregar_dados(self, df: pd.DataFrame, table_name=None, mode='append'):
+        """
+        Carrega dados no BigQuery.
+        Se table_name não for passado, usa a tabela do ano selecionado (ex: relatorios_lrco_2025).
+        """
+        # Se nenhum nome específico for passado, usa o padrão do ano atual
+        if table_name is None or table_name == 'relatorios_lrco':
+            destination_table = f"{self.dataset_id}.{self.table_name_base}"
+        else:
+            # Caso seja uma tabela de auditoria ou específica
+            destination_table = f"{self.dataset_id}.{table_name}"
+
         try:
-            pandas_gbq.to_gbq(df, destination_table, self.project_id, credentials=self.creds, if_exists=mode,
-                              progress_bar=False)
+            pandas_gbq.to_gbq(
+                df,
+                destination_table,
+                self.project_id,
+                credentials=self.creds,
+                if_exists=mode,
+                progress_bar=False
+            )
             return True
         except Exception as e:
             st.error(f"Erro ao carregar dados na tabela {destination_table}: {e}")

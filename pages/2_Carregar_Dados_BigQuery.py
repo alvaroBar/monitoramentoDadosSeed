@@ -10,9 +10,11 @@ from streamlit_autorefresh import st_autorefresh
 from services import auth_service
 from services.bigquery_service import BigQueryService
 from utils.dataframe_utils import preparar_dataframe_para_bigquery
+from utils import interface
 
 st.set_page_config(layout="wide")
 st.title("Passo 2: Carregar Dados para o BigQuery ☁️")
+interface.exibir_cabecalho_ano()
 
 # 1. Autenticação
 auth_service.autenticar_usuario()

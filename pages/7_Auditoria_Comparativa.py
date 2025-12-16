@@ -13,9 +13,11 @@ from services import auth_service
 from services.bigquery_service import BigQueryService
 from services import analysis_service
 from google.cloud import bigquery
+from utils import interface
 
 st.set_page_config(layout="wide")
 st.title("Auditoria e Validação 🔬")
+interface.exibir_cabecalho_ano()
 
 # --- Bloco de Inicialização Padrão ---
 auth_service.autenticar_usuario()
