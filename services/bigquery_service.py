@@ -23,7 +23,7 @@ class BigQueryService:
 
         # Define o ID da tabela com o SUFIXO do ano
         # Alterar o nome da tabela para a utilizada pelo nome em produção
-        self.table_name_base = f"relatorios_lrco_alvaro_{self.ano_vigente}"
+        self.table_name_base = f"relatorios_lrco_{self.ano_vigente}"
         self.table_id = f"`{self.project_id}.{self.dataset_id}.{self.table_name_base}`"
 
     def carregar_dados(self, df: pd.DataFrame, table_name=None, mode='append'):
