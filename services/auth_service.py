@@ -21,8 +21,6 @@ def get_google_auth_flow():
     )
 
 
-# services/auth_service.py -> SUBSTITUA A FUNÇÃO INTEIRA POR ESTA
-
 def autenticar_usuario():
     """Gerencia o fluxo de login do usuário, exibindo um botão para iniciar."""
     # Se já possui credenciais na sessão, o usuário já está logado.
@@ -35,6 +33,10 @@ def autenticar_usuario():
     if auth_code:
         # Etapa 2: O usuário retornou do Google com um código de autorização
         try:
+            # --- CORREÇÃO 2: RECUPERA O CODE_VERIFIER DA SESSÃO ---
+            if 'code_verifier' in st.session_state:
+                flow.code_verifier = st.session_state['code_verifier']
+
             flow.fetch_token(code=auth_code)
             creds = flow.credentials
             st.session_state.credentials = creds
@@ -44,22 +46,28 @@ def autenticar_usuario():
 
             st.session_state.user_info = user_info
             st.query_params.clear()  # Limpa o código da URL
+
+            # Limpeza opcional: o code_verifier já cumpriu seu papel, podemos apagá-lo
+            if 'code_verifier' in st.session_state:
+                del st.session_state['code_verifier']
+
             st.rerun()
         except Exception as e:
             st.error(f"Erro ao obter o token de acesso: {e}")
             st.stop()
     else:
         # Etapa 1: O usuário não está logado. Mostra o botão de login.
-        # --- CORREÇÃO APLICADA AQUI ---
-        # Adiciona access_type='offline' para solicitar o refresh_token para sessões longas.
-        auth_url, _ = flow.authorization_url(
+        auth_url, state = flow.authorization_url(
             access_type='offline',
             include_granted_scopes='true',
             prompt="select_account"
         )
 
+        # --- CORREÇÃO 1: SALVA O CODE_VERIFIER GERADO ANTES DE SAIR DA PÁGINA ---
+        st.session_state['code_verifier'] = flow.code_verifier
+
         st.link_button("Login com Google", auth_url, use_container_width=True, type="primary")
-        st.info("ℹ️ Para aceder, por favor, faça o login com a sua conta Google.")
+        st.info("ℹ️ Para acessar, por favor, faça o login com a sua conta Google.")
         st.stop()
 
 
