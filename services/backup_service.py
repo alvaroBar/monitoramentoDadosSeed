@@ -46,16 +46,19 @@ class BackupService:
             return False, f"Ocorreu um erro geral durante o backup: {e}"
 
 
+# services/backup_service.py
+
 def verificar_e_executar_backup_semanal(forcar_teste=False):
     """
-    Executa o backup automático no Google Drive.
-    :param forcar_teste: Se True, ignora a trava de dia da semana para testes imediatos.
+    Executa o backup automático no Google Drive com mensagens detalhadas na tela.
     """
     # 1. Checa Credenciais
     if 'credentials' not in st.session_state:
+        if forcar_teste:
+            st.warning("⚠️ [Diagnóstico Backup] Falha: Usuário não possui 'credentials' na sessão.")
         return
 
-    # 2. Busca o dataset_id (Tenta pegar da sessão ou do arquivo de configuração)
+    # 2. Busca o dataset_id
     dataset_id = st.session_state.get('dataset_id')
     if not dataset_id:
         from utils import config
@@ -63,22 +66,22 @@ def verificar_e_executar_backup_semanal(forcar_teste=False):
 
     if not dataset_id:
         if forcar_teste:
-            st.warning("⚠️ Backup cancelado: 'dataset_id' não encontrado na sessão (st.session_state).")
+            st.warning("⚠️ [Diagnóstico Backup] Falha: 'dataset_id' não encontrado em st.session_state nem no config.py.")
         return
 
-    DIA_DA_SEMANA_DO_BACKUP = 0  # 0 = Segunda-feira
+    DIA_DA_SEMANA_DO_BACKUP = 0  # 0 = Segunda-feira (Hoje)
     hoje = datetime.now()
     data_hoje_str = hoje.strftime("%Y-%m-%d")
 
-    # 3. Verifica se hoje é segunda-feira OU se é um teste forçado
     eh_dia_de_backup = (hoje.weekday() == DIA_DA_SEMANA_DO_BACKUP)
 
     if eh_dia_de_backup or forcar_teste:
-        # Trava para não repetir no mesmo dia (desativada no modo forcar_teste)
         if st.session_state.get('ultimo_backup_executado') == data_hoje_str and not forcar_teste:
             return
 
         try:
+            st.info("🔄 [Diagnóstico Backup] Conectando ao BigQuery e ao Google Drive...")
+
             bq_service = BigQueryService(
                 credentials=st.session_state.credentials,
                 dataset_id=dataset_id
@@ -91,8 +94,9 @@ def verificar_e_executar_backup_semanal(forcar_teste=False):
             if sucesso:
                 st.session_state['ultimo_backup_executado'] = data_hoje_str
                 st.toast("🎉 Backup realizado com sucesso no Google Drive!", icon="✅")
+                st.success(f"✅ {mensagem}")
             else:
-                st.error(f"❌ Falha ao realizar backup no Drive: {mensagem}")
+                st.error(f"❌ Falha retornado pelo backup: {mensagem}")
 
         except Exception as e:
-            st.error(f"❌ Erro ao tentar executar a rotina de backup: {e}")
+            st.error(f"❌ Erro Crítico durante o backup: {e}")

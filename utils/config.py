@@ -12,7 +12,7 @@ try:
     PROJECT_ID = st.secrets.google_oauth.project_id
     REDIRECT_URI = st.secrets.google_oauth.redirect_uri
     SCOPES = [
-        "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
     "openid",
     "https://www.googleapis.com/auth/bigquery",
