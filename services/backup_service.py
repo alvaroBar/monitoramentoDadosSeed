@@ -45,44 +45,54 @@ class BackupService:
         except Exception as e:
             return False, f"Ocorreu um erro geral durante o backup: {e}"
 
-def verificar_e_executar_backup_semanal():
-        """
-        Executa o backup automático no Google Drive caso seja o dia configurado (segunda-feira)
-        e o backup do dia ainda não tenha sido realizado nesta sessão.
-        """
-        # Garante que o usuário esteja autenticado e com as credenciais/dataset na sessão
-        if 'credentials' not in st.session_state or 'dataset_id' not in st.session_state:
+
+def verificar_e_executar_backup_semanal(forcar_teste=False):
+    """
+    Executa o backup automático no Google Drive.
+    :param forcar_teste: Se True, ignora a trava de dia da semana para testes imediatos.
+    """
+    # 1. Checa Credenciais
+    if 'credentials' not in st.session_state:
+        return
+
+    # 2. Busca o dataset_id (Tenta pegar da sessão ou do arquivo de configuração)
+    dataset_id = st.session_state.get('dataset_id')
+    if not dataset_id:
+        from utils import config
+        dataset_id = getattr(config, 'DATASET_ID', None)
+
+    if not dataset_id:
+        if forcar_teste:
+            st.warning("⚠️ Backup cancelado: 'dataset_id' não encontrado na sessão (st.session_state).")
+        return
+
+    DIA_DA_SEMANA_DO_BACKUP = 0  # 0 = Segunda-feira
+    hoje = datetime.now()
+    data_hoje_str = hoje.strftime("%Y-%m-%d")
+
+    # 3. Verifica se hoje é segunda-feira OU se é um teste forçado
+    eh_dia_de_backup = (hoje.weekday() == DIA_DA_SEMANA_DO_BACKUP)
+
+    if eh_dia_de_backup or forcar_teste:
+        # Trava para não repetir no mesmo dia (desativada no modo forcar_teste)
+        if st.session_state.get('ultimo_backup_executado') == data_hoje_str and not forcar_teste:
             return
 
-        DIA_DA_SEMANA_DO_BACKUP = 0  # 0 = Segunda-feira
-        hoje = datetime.now()
-        data_hoje_str = hoje.strftime("%Y-%m-%d")
+        try:
+            bq_service = BigQueryService(
+                credentials=st.session_state.credentials,
+                dataset_id=dataset_id
+            )
+            drive_service = DriveService(credentials=st.session_state.credentials)
+            backup_service = BackupService(bq_service, drive_service)
 
-        # 1. Verifica se hoje é o dia programado
-        if hoje.weekday() == DIA_DA_SEMANA_DO_BACKUP:
-            # 2. Trava para evitar reexecutar toda vez que o Streamlit recarregar a página no mesmo dia
-            if st.session_state.get('ultimo_backup_executado') == data_hoje_str:
-                return
+            sucesso, mensagem = backup_service.execute_backup(dataset_id)
 
-            try:
-                # Inicializa os serviços com as credenciais do usuário logado
-                bq_service = BigQueryService(
-                    credentials=st.session_state.credentials,
-                    dataset_id=st.session_state.dataset_id
-                )
-                drive_service = DriveService(credentials=st.session_state.credentials)
-                backup_service = BackupService(bq_service, drive_service)
+            if sucesso:
+                st.session_state['ultimo_backup_executado'] = data_hoje_str
+                st.toast("🎉 Backup realizado com sucesso no Google Drive!", icon="✅")
+            else:
+                st.error(f"❌ Falha ao realizar backup no Drive: {mensagem}")
 
-                # Executa o backup
-                sucesso, mensagem = backup_service.execute_backup(st.session_state.dataset_id)
-
-                if sucesso:
-                    # Marca que o backup de hoje já foi feito
-                    st.session_state['ultimo_backup_executado'] = data_hoje_str
-                    st.toast("🔄 Backup semanal automático realizado no Google Drive!", icon="✅")
-                else:
-                    st.warning(f"⚠️ Tentativa de backup automático: {mensagem}")
-
-            except Exception as e:
-                # Silencioso ou log de erro para não travar o carregamento do usuário
-                print(f"Erro ao executar backup automático de início: {e}")
+        except Exception as e:
+            st.error(f"❌ Erro ao tentar executar a rotina de backup: {e}")
