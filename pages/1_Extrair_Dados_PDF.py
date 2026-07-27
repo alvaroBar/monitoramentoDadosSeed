@@ -13,6 +13,7 @@ import io  # Necessário para criar os arquivos Excel/CSV em memória
 from services import auth_service
 from streamlit_autorefresh import st_autorefresh
 from utils import interface
+from services.backup_service import verificar_e_executar_backup_semanal
 
 # Configuração da página
 st.set_page_config(
