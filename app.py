@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from services import auth_service
+from services.backup_service import verificar_e_executar_backup_semanal
 from services.bigquery_service import BigQueryService
 from streamlit_autorefresh import st_autorefresh
 import datetime
@@ -44,6 +45,7 @@ interface.exibir_cabecalho_ano()
 
 # ------------------ Autenticação ------------------
 auth_service.autenticar_usuario()
+verificar_e_executar_backup_semanal()
 
 if 'user_info' in st.session_state:
     user_info = st.session_state.user_info
