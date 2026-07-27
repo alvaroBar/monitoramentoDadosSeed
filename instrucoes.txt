@@ -1,0 +1,65 @@
+Passo a Passo para Configuração Multilocatário (por Datasets)
+Siga estas etapas para preparar seu ambiente para a nova arquitetura.
+
+1. Crie os Conjuntos de Dados (Datasets) no BigQuery
+Para cada escritório que usará o sistema, você precisa criar um "conjunto de dados" separado.
+
+Vá para a interface do BigQuery.
+
+Ao lado do nome do seu projeto (monitoramento-lancamentos-rco), clique nos três pontos (⋮) e selecione "Criar conjunto de dados".
+
+ID do conjunto de dados: Dê um nome único, sem espaços ou caracteres especiais (ex: dados_escritorio_palotina, dados_escritorio_toledo).
+
+Local dos dados: Selecione southamerica-east1 (São Paulo).
+
+Clique em "CRIAR CONJUNTO DE DADOS".
+
+Repita este processo para cada escritório.
+
+2. Crie a Tabela relatorios_lrco em CADA Conjunto de Dados
+Agora, dentro de cada conjunto de dados que você criou, execute o seguinte comando SQL para criar a tabela de relatórios. Você precisará ajustar o nome do conjunto de dados em cada execução.
+
+Exemplo para o dataset dados_escritorio_palotina:
+
+CREATE OR REPLACE TABLE `monitoramento-lancamentos-rco.dados_escritorio_palotina.relatorios_lrco`
+(
+  SEMANA INT64,
+  DATA_DO_RELATORIO DATE,
+  MUNICIPIO STRING,
+  ESCOLA STRING,
+  TURMA STRING,
+  HORARIO TIME,
+  DISCIPLINA STRING,
+  REGISTRO_DE_AULA DATETIME,
+  REGISTRO_DE_CONTEUDO DATETIME
+);
+
+Execute este comando para cada um dos seus conjuntos de dados, alterando dados_escritorio_palotina conforme necessário.
+
+3. Configure os "Secrets" no Streamlit
+Precisamos dizer ao Streamlit qual usuário pertence a qual conjunto de dados.
+
+Vá para as configurações do seu aplicativo no Streamlit (Manage app -> Settings -> Secrets).
+
+Substitua todo o conteúdo dos seus segredos pelo formato abaixo.
+
+A seção [google_oauth] continua a mesma de antes (com as credenciais do seu aplicativo da Web).
+
+A nova seção [office_mapping] é onde você define o mapeamento.
+
+# Segredos para autenticação de usuário da Web
+[google_oauth]
+client_id = "SEU_ID_DE_CLIENTE_AQUI"
+client_secret = "SUA_CHAVE_SECRETA_AQUI"
+redirect_uri = "A_URL_DO_SEU_APP_STREAMLIT_AQUI"
+
+# Mapeamento de e-mails de usuários para seus respectivos datasets
+[office_mapping]
+"usuario1@palotina.com" = "dados_escritorio_palotina"
+"usuario2@palotina.com" = "dados_escritorio_palotina"
+"gerente@toledo.com" = "dados_escritorio_toledo"
+"outro.usuario@cascavel.com" = "dados_escritorio_cascavel"
+
+Adicione os e-mails de todos os seus usuários e a qual ID de conjunto de dados eles pertencem.
+
+Clique em "Salvar".

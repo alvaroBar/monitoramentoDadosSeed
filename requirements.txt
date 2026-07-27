@@ -1,0 +1,16 @@
+# requirements.txt - Versão Completa e Corrigida
+
+streamlit
+pandas
+pdfplumber
+openpyxl
+xlsxwriter
+google-cloud-bigquery
+pandas-gbq
+google-auth-oauthlib
+google-api-python-client
+google-auth-httplib2
+pyarrow
+streamlit-autorefresh
+plotly
+tqdm
