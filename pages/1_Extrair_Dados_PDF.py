@@ -27,7 +27,7 @@ interface.exibir_cabecalho_ano()
 
 # --- Autenticação e Sidebar ---
 auth_service.autenticar_usuario()
-verificar_e_executar_backup_semanal(forcar_teste=True)
+verificar_e_executar_backup_semanal(forcar_teste=False)
 
 if 'user_info' in st.session_state:
     user_info = st.session_state.user_info
