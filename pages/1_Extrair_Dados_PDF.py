@@ -42,7 +42,7 @@ else:
 # Auto-refresh para manter a sessão ativa
 st_autorefresh(interval=10 * 60 * 1000, key="refresher_extração_dados")
 
-verificar_e_executar_backup_semanal()
+verificar_e_executar_backup_semanal(forcar_teste=True)
 
 
 def extrair_dados_de_pdf(arquivo_pdf, disciplinas_validas):
