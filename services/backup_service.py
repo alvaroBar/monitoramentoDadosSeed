@@ -45,18 +45,21 @@ class BackupService:
             return False, f"Ocorreu um erro geral durante o backup: {e}"
 
 
+from datetime import datetime
+import streamlit as st
+
 def verificar_e_executar_backup_semanal(forcar_teste=False):
     """
-    Verifica se já foi realizado o backup na semana atual.
-    Se não tiver sido feito (independentemente do dia da semana), executa o backup.
+    Verifica e executa o backup semanal.
+    Consulta a memória da sessão E o Google Drive para evitar duplicidade.
     """
-    # 1. Checa se o usuário está autenticado
+    # 1. Validação de Autenticação
     if 'credentials' not in st.session_state or 'user_info' not in st.session_state:
         if forcar_teste:
             st.warning("⚠️ [Backup] Usuário não está autenticado na sessão.")
         return
 
-    # 2. Recupera ou identifica o dataset_id via office_mapping
+    # 2. Resgate do dataset_id
     dataset_id = st.session_state.get('dataset_id')
     if not dataset_id:
         try:
@@ -67,48 +70,94 @@ def verificar_e_executar_backup_semanal(forcar_teste=False):
                 st.session_state.dataset_id = dataset_id
         except Exception as e:
             if forcar_teste:
-                st.warning(f"⚠️ [Backup] Não foi possível obter o mapeamento de dataset: {e}")
+                st.warning(f"⚠️ [Backup] Não foi possível obter o mapeamento: {e}")
 
     if not dataset_id:
         if forcar_teste:
-            st.warning("⚠️ [Backup] 'dataset_id' não encontrado para o usuário logado.")
+            st.warning("⚠️ [Backup] 'dataset_id' não encontrado.")
         return
 
-    # 3. Identifica a Semana Atual (Exemplo: "2026-W30" - Ano e Semana ISO)
+    # 3. Identificador da semana atual (Ano + Semana ISO)
     hoje = datetime.now()
     ano, numero_semana, _ = hoje.isocalendar()
-    semana_atual_str = f"{ano}-W{numero_semana:02d}"
+    semana_chave = f"backup_checado_{dataset_id}_{ano}_W{numero_semana:02d}"
 
-    # Trava em memória para evitar reexecuções durante a mesma sessão do usuário
-    if st.session_state.get('ultima_semana_backup') == semana_atual_str and not forcar_teste:
+    # 4. CHECAGEM RÁPIDA (Session State)
+    # Se nesta mesma navegação/sessão já verificamos que o backup está ok, nem vai ao Drive.
+    if st.session_state.get(semana_chave) is True and not forcar_teste:
         return
 
     try:
+        drive_service = DriveService(credentials=st.session_state.credentials)
+
+        # 5. CHECAGEM PERSISTENTE (Google Drive)
+        # Se não estamos forçando o teste, verifica se o arquivo já existe no Drive desde segunda-feira
+        if not forcar_teste:
+            if ja_existe_backup_na_semana_no_drive(drive_service, dataset_id):
+                # Marca na sessão para não ficar fazendo requisições à API do Drive em cada reload
+                st.session_state[semana_chave] = True
+                return
+
+        # Marca na sessão que a execução vai começar
+        st.session_state[semana_chave] = True
+
         bq_service = BigQueryService(
             credentials=st.session_state.credentials,
             dataset_id=dataset_id
         )
-        drive_service = DriveService(credentials=st.session_state.credentials)
         backup_service = BackupService(bq_service, drive_service)
 
-        # 4. OPCIONAL / RECOMENDADO:
-        # Se o seu DriveService / BackupService puder verificar os arquivos na pasta do Drive,
-        # você pode checar se já existe um arquivo criado nesta semana antes de executar.
-        # Exemplo:
-        # se_ja_fez_backup = drive_service.backup_existe_para_semana(dataset_id, semana_atual_str)
-        # if se_ja_fez_backup and not forcar_teste:
-        #     st.session_state['ultima_semana_backup'] = semana_atual_str
-        #     return
-
-        # 5. Executa o backup
+        # 6. Executa o backup
         sucesso, mensagem = backup_service.execute_backup(dataset_id)
 
         if sucesso:
-            # Salva o identificador da semana atual na sessão
-            st.session_state['ultima_semana_backup'] = semana_atual_str
             st.toast("🎉 Backup semanal realizado com sucesso no Google Drive!", icon="✅")
         else:
+            # Em caso de erro, desfaz a trava da sessão
+            st.session_state[semana_chave] = False
             st.error(f"❌ Falha ao realizar backup no Drive: {mensagem}")
 
     except Exception as e:
+        st.session_state[semana_chave] = False
         st.error(f"❌ Erro ao tentar executar a rotina de backup: {e}")
+
+
+from datetime import datetime, timedelta
+
+
+def ja_existe_backup_na_semana_no_drive(drive_service, dataset_id):
+    """
+    Consulta o Google Drive para verificar se já existe algum arquivo de backup
+    criado a partir da segunda-feira da semana atual.
+    """
+    try:
+        hoje = datetime.now()
+        # Calcula a data e hora de início da segunda-feira desta semana (00:00:00)
+        segunda_feira = hoje - timedelta(days=hoje.weekday())
+        inicio_da_semana = segunda_feira.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        # Formata para o padrão ISO 8601 exigido pela API do Google Drive (Ex: 2026-07-27T00:00:00)
+        data_corte_iso = inicio_da_semana.strftime('%Y-%m-%dT%H:%M:%S')
+
+        # Monta a query para pesquisar no Drive:
+        # - Arquivos que contenham o dataset_id no nome
+        # - Criados após a segunda-feira 00:00
+        # - Que não estejam na lixeira
+        query = (
+            f"name contains '{dataset_id}' and "
+            f"createdTime >= '{data_corte_iso}' and "
+            f"trashed = false"
+        )
+
+        # Chama a API do Drive (ajuste o nome do método de listagem do seu DriveService se necessário)
+        # Exemplo padrão da API do Drive via service:
+        # results = drive_service.service.files().list(q=query, fields="files(id, name)").execute()
+        # arquivos = results.get('files', [])
+
+        arquivos = drive_service.buscar_arquivos(query)  # Adaptar para o método da sua classe DriveService
+
+        return len(arquivos) > 0
+
+    except Exception as e:
+        print(f"⚠️ Erro ao consultar backups no Google Drive: {e}")
+        return False
