@@ -42,3 +42,21 @@ class DriveService:
             return True, f"Arquivo '{file_name}' enviado com sucesso!"
         except Exception as e:
             return False, f"Erro ao enviar arquivo para o Google Drive: {e}"
+
+
+    def buscar_arquivos(self, query: str):
+        """
+        Busca arquivos no Google Drive utilizando uma sintaxe de consulta (query).
+        """
+        try:
+            # Chama a API oficial do Google Drive
+            results = self.service.files().list(
+                q=query,
+                fields="files(id, name, createdTime)",
+                pageSize=10
+            ).execute()
+
+            return results.get('files', [])
+        except Exception as e:
+            print(f"❌ Erro na consulta do DriveService: {e}")
+            return []
