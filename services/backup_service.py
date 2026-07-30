@@ -132,32 +132,30 @@ def ja_existe_backup_na_semana_no_drive(drive_service, dataset_id):
     """
     try:
         hoje = datetime.now()
-        # Calcula a data e hora de início da segunda-feira desta semana (00:00:00)
+        # Data/hora de início da segunda-feira desta semana (00:00:00)
         segunda_feira = hoje - timedelta(days=hoje.weekday())
         inicio_da_semana = segunda_feira.replace(hour=0, minute=0, second=0, microsecond=0)
 
-        # Formata para o padrão ISO 8601 exigido pela API do Google Drive (Ex: 2026-07-27T00:00:00)
-        data_corte_iso = inicio_da_semana.strftime('%Y-%m-%dT%H:%M:%S')
+        # O 'Z' no final é OBRIGATÓRIO para a API do Google Drive
+        data_corte_iso = inicio_da_semana.strftime('%Y-%m-%dT%H:%M:%SZ')
 
-        # Monta a query para pesquisar no Drive:
-        # - Arquivos que contenham o dataset_id no nome
-        # - Criados após a segunda-feira 00:00
-        # - Que não estejam na lixeira
+        # Query corrigida com o sufixo 'Z' e filtro pelo padrão exato 'backup_DATASET'
         query = (
-            f"name contains '{dataset_id}' and "
+            f"name contains 'backup_{dataset_id}' and "
             f"createdTime >= '{data_corte_iso}' and "
             f"trashed = false"
         )
 
-        # Chama a API do Drive (ajuste o nome do método de listagem do seu DriveService se necessário)
-        # Exemplo padrão da API do Drive via service:
-        # results = drive_service.service.files().list(q=query, fields="files(id, name)").execute()
-        # arquivos = results.get('files', [])
+        arquivos = drive_service.buscar_arquivos(query)
 
-        arquivos = drive_service.buscar_arquivos(query)  # Adaptar para o método da sua classe DriveService
-
+        # Retorna True se encontrou 1 ou mais arquivos criados nesta semana
         return len(arquivos) > 0
 
     except Exception as e:
-        print(f"⚠️ Erro ao consultar backups no Google Drive: {e}")
-        return False
+        # Exibe o erro na tela do Streamlit para sabermos caso ocorra alguma falha na API
+        st.error(f"⚠️ [Debug Backup] Erro ao consultar o Google Drive: {e}")
+
+        # RETORNO DE SEGURANÇA:
+        # Em caso de erro de API, retornamos True temporariamente para EVITAR
+        # que o sistema gere múltiplos backups indesejados.
+        return True
