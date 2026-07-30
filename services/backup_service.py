@@ -47,7 +47,8 @@ class BackupService:
 
 def verificar_e_executar_backup_semanal(forcar_teste=False):
     """
-    Verifica e executa o backup automático no Google Drive.
+    Verifica se já foi realizado o backup na semana atual.
+    Se não tiver sido feito (independentemente do dia da semana), executa o backup.
     """
     # 1. Checa se o usuário está autenticado
     if 'credentials' not in st.session_state or 'user_info' not in st.session_state:
@@ -73,31 +74,41 @@ def verificar_e_executar_backup_semanal(forcar_teste=False):
             st.warning("⚠️ [Backup] 'dataset_id' não encontrado para o usuário logado.")
         return
 
-    DIA_DA_SEMANA_DO_BACKUP = 0  # 0 = Segunda-feira (Hoje)
+    # 3. Identifica a Semana Atual (Exemplo: "2026-W30" - Ano e Semana ISO)
     hoje = datetime.now()
-    data_hoje_str = hoje.strftime("%Y-%m-%d")
+    ano, numero_semana, _ = hoje.isocalendar()
+    semana_atual_str = f"{ano}-W{numero_semana:02d}"
 
-    eh_dia_de_backup = (hoje.weekday() == DIA_DA_SEMANA_DO_BACKUP)
+    # Trava em memória para evitar reexecuções durante a mesma sessão do usuário
+    if st.session_state.get('ultima_semana_backup') == semana_atual_str and not forcar_teste:
+        return
 
-    if eh_dia_de_backup or forcar_teste:
-        if st.session_state.get('ultimo_backup_executado') == data_hoje_str and not forcar_teste:
-            return
+    try:
+        bq_service = BigQueryService(
+            credentials=st.session_state.credentials,
+            dataset_id=dataset_id
+        )
+        drive_service = DriveService(credentials=st.session_state.credentials)
+        backup_service = BackupService(bq_service, drive_service)
 
-        try:
-            bq_service = BigQueryService(
-                credentials=st.session_state.credentials,
-                dataset_id=dataset_id
-            )
-            drive_service = DriveService(credentials=st.session_state.credentials)
-            backup_service = BackupService(bq_service, drive_service)
+        # 4. OPCIONAL / RECOMENDADO:
+        # Se o seu DriveService / BackupService puder verificar os arquivos na pasta do Drive,
+        # você pode checar se já existe um arquivo criado nesta semana antes de executar.
+        # Exemplo:
+        # se_ja_fez_backup = drive_service.backup_existe_para_semana(dataset_id, semana_atual_str)
+        # if se_ja_fez_backup and not forcar_teste:
+        #     st.session_state['ultima_semana_backup'] = semana_atual_str
+        #     return
 
-            sucesso, mensagem = backup_service.execute_backup(dataset_id)
+        # 5. Executa o backup
+        sucesso, mensagem = backup_service.execute_backup(dataset_id)
 
-            if sucesso:
-                st.session_state['ultimo_backup_executado'] = data_hoje_str
-                st.toast("🎉 Backup realizado com sucesso no Google Drive!", icon="✅")
-            else:
-                st.error(f"❌ Falha ao realizar backup no Drive: {mensagem}")
+        if sucesso:
+            # Salva o identificador da semana atual na sessão
+            st.session_state['ultima_semana_backup'] = semana_atual_str
+            st.toast("🎉 Backup semanal realizado com sucesso no Google Drive!", icon="✅")
+        else:
+            st.error(f"❌ Falha ao realizar backup no Drive: {mensagem}")
 
-        except Exception as e:
-            st.error(f"❌ Erro ao tentar executar a rotina de backup: {e}")
+    except Exception as e:
+        st.error(f"❌ Erro ao tentar executar a rotina de backup: {e}")
